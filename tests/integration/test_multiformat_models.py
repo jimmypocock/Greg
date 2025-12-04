@@ -19,7 +19,7 @@ from pathlib import Path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from src.config import Config
+from src.config.settings import Config
 import ollama
 from tests.utils import get_model_full_name, get_available_models as get_available_models_util, parse_model_list
 

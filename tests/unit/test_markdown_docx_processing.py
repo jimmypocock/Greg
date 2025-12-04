@@ -13,8 +13,8 @@ import shutil
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.document_processor import DocumentProcessor
-from src.config import Config
+from src.documents.processor import DocumentProcessor
+from src.config.settings import Config
 
 class TestMarkdownDocxProcessing:
     """Test document processing for Markdown and Word files"""

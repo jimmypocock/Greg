@@ -7,7 +7,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.error_messages import ErrorMessages
+from src.config.errors import ErrorMessages
 
 
 def test_ollama_connection_error():

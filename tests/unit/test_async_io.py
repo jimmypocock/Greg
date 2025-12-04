@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 
-from src.async_io import (
+from src.utils.async_io import (
     read_file_async, write_file_async, hash_file_async,
     save_json_async, load_json_async, delete_file_async,
     file_exists_async, stream_file_async, process_files_batch_async

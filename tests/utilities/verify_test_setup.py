@@ -13,10 +13,10 @@ print("=" * 60)
 
 # Check imports
 tests_to_verify = [
-    ("Unit test imports", "from src.document_processor import DocumentProcessor"),
-    ("Web search imports", "from src.web_search import WebSearcher"),
+    ("Unit test imports", "from src.documents.processor import DocumentProcessor"),
+    ("Web search imports", "from src.rag.web_search import WebSearcher"),
     ("UI test imports", "from tests.ui.base_test import StreamlitTest"),
-    ("Config imports", "from src.config import Config"),
+    ("Config imports", "from src.config.settings import Config"),
 ]
 
 for test_name, import_stmt in tests_to_verify:

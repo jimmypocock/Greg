@@ -8,8 +8,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.qa_chain_unified import UnifiedQAChain
-from src.web_search import WebSearcher, SearchResult
+from src.rag.chain import UnifiedQAChain
+from src.rag.web_search import WebSearcher, SearchResult
 
 
 def test_enhanced_qa_chain_initialization():

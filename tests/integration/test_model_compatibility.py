@@ -19,7 +19,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.config import Config
+from src.config.settings import Config
 from langchain_community.llms import Ollama
 import ollama as ollama_module
 
