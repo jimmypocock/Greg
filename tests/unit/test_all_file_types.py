@@ -12,8 +12,8 @@ from unittest.mock import Mock, patch
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.document_processor import DocumentProcessor
-from src.config import Config
+from src.documents.processor import DocumentProcessor
+from src.config.settings import Config
 
 def test_all_supported_file_types():
     """Test that all advertised file types are actually supported"""

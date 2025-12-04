@@ -12,12 +12,12 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 # Import all the modules we've fixed
-from src.security import (
+from src.security.sanitization import (
     sanitize_filename, create_safe_file_path, sanitize_query_string,
     validate_model_name, validate_parameter_bounds, sanitize_error_message,
     validate_vector_store_path, is_safe_url
 )
-from src.vector_store_manager import VectorStoreManager
+from src.vectorstore.manager import VectorStoreManager
 from src.performance.request_queue import RequestQueueManager
 from src.ui.session_manager import IsolatedSessionManager
 

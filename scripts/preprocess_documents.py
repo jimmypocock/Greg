@@ -15,8 +15,8 @@ from typing import List
 # Add parent directory to path so we can import from src
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.config import Config
-from src.unified_document_processor import UnifiedDocumentProcessor
+from src.config.settings import Config
+from src.documents.unified import UnifiedDocumentProcessor
 
 
 def ensure_vector_stores_dir():

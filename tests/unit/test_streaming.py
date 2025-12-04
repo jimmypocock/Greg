@@ -11,7 +11,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.streaming.handler import StreamingResponseHandler, create_streaming_response
-from src.qa_chain_unified import UnifiedQAChain
+from src.rag.chain import UnifiedQAChain
 
 
 def test_streaming_handler():

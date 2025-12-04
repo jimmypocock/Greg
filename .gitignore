@@ -12,7 +12,6 @@ ENV/
 # Project specific
 uploads/
 vector_stores/
-documents/
 *.faiss
 *.metadata
 

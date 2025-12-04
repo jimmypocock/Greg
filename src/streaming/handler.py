@@ -6,11 +6,11 @@ import json
 from queue import Queue
 from threading import Thread
 
-from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
-from langchain.schema import LLMResult
-from langchain.schema.messages import BaseMessage
-from langchain.schema.agent import AgentAction, AgentFinish
-from langchain.schema.output import ChatGenerationChunk, GenerationChunk
+from langchain_core.callbacks import AsyncCallbackHandler, BaseCallbackHandler
+from langchain_core.outputs import LLMResult
+from langchain_core.messages import BaseMessage
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.outputs import ChatGenerationChunk, GenerationChunk
 
 
 class StreamingResponseHandler(BaseCallbackHandler):

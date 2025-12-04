@@ -2,7 +2,7 @@
 import pytest
 import time
 from datetime import datetime
-from src.web_search import WebSearcher, SearchResult
+from src.rag.web_search import WebSearcher, SearchResult
 
 
 class TestWebSearch:

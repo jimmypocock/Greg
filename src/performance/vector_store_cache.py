@@ -7,10 +7,10 @@ from pathlib import Path
 import numpy as np
 from collections import OrderedDict
 import faiss
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 
-from src.config import Config
+from src.config.settings import Config
 
 
 class OptimizedVectorStore:
