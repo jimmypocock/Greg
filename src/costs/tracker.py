@@ -1,21 +1,40 @@
 """
 AI cost tracking service.
 
-Logs individual requests and maintains daily aggregates.
+Logs individual requests and computes aggregates on-the-fly from ai_requests.
 """
 
 import logging
 import uuid
-from datetime import date, datetime
+from dataclasses import dataclass
+from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.models import AICostDaily, AIRequest, LLMProvider, RequestType
-from src.costs.pricing import calculate_cost
+from src.database.models import AIRequest, LLMProvider, RequestType
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DailyCostSummary:
+    """Aggregated cost summary for a specific day/provider/model."""
+
+    date: date
+    provider: LLMProvider
+    model: str
+    total_requests: int
+    successful_requests: int
+    failed_requests: int
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cached_tokens: int
+    total_input_cost_usd: Decimal
+    total_output_cost_usd: Decimal
+    total_cost_usd: Decimal
+    avg_latency_ms: int | None
 
 
 def get_provider_from_model(model: str) -> LLMProvider:
@@ -74,6 +93,8 @@ async def log_request(
     Returns:
         The created AIRequest record.
     """
+    from src.costs.pricing import calculate_cost
+
     # Auto-detect provider if not specified
     if provider is None:
         provider = get_provider_from_model(model)
@@ -104,23 +125,6 @@ async def log_request(
     )
 
     session.add(request)
-
-    # Update daily aggregate
-    await update_daily_aggregate(
-        session=session,
-        user_id=user_id,
-        provider=provider,
-        model=model,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        cached_tokens=cached_tokens,
-        input_cost=input_cost,
-        output_cost=output_cost,
-        total_cost=total_cost,
-        latency_ms=latency_ms,
-        success=success,
-    )
-
     await session.commit()
 
     logger.info(
@@ -131,94 +135,16 @@ async def log_request(
     return request
 
 
-async def update_daily_aggregate(
-    session: AsyncSession,
-    *,
-    user_id: uuid.UUID,
-    provider: LLMProvider,
-    model: str,
-    input_tokens: int,
-    output_tokens: int,
-    cached_tokens: int,
-    input_cost: Decimal,
-    output_cost: Decimal,
-    total_cost: Decimal,
-    latency_ms: int | None,
-    success: bool,
-) -> AICostDaily:
-    """
-    Update or create daily aggregate record.
-
-    Uses upsert pattern to atomically update the aggregate.
-    """
-    today = date.today()
-
-    # Try to find existing record
-    stmt = select(AICostDaily).where(
-        AICostDaily.user_id == user_id,
-        AICostDaily.date == today,
-        AICostDaily.provider == provider,
-        AICostDaily.model == model,
-    )
-    result = await session.execute(stmt)
-    daily = result.scalar_one_or_none()
-
-    if daily is None:
-        # Create new record
-        daily = AICostDaily(
-            user_id=user_id,
-            date=today,
-            provider=provider,
-            model=model,
-            total_requests=1,
-            successful_requests=1 if success else 0,
-            failed_requests=0 if success else 1,
-            total_input_tokens=input_tokens,
-            total_output_tokens=output_tokens,
-            total_cached_tokens=cached_tokens,
-            total_input_cost_usd=input_cost,
-            total_output_cost_usd=output_cost,
-            total_cost_usd=total_cost,
-            avg_latency_ms=latency_ms,
-        )
-        session.add(daily)
-    else:
-        # Update existing record
-        daily.total_requests += 1
-        if success:
-            daily.successful_requests += 1
-        else:
-            daily.failed_requests += 1
-
-        daily.total_input_tokens += input_tokens
-        daily.total_output_tokens += output_tokens
-        daily.total_cached_tokens += cached_tokens
-        daily.total_input_cost_usd += input_cost
-        daily.total_output_cost_usd += output_cost
-        daily.total_cost_usd += total_cost
-
-        # Update average latency
-        if latency_ms is not None:
-            if daily.avg_latency_ms is None:
-                daily.avg_latency_ms = latency_ms
-            else:
-                # Running average
-                n = daily.total_requests
-                daily.avg_latency_ms = int(
-                    (daily.avg_latency_ms * (n - 1) + latency_ms) / n
-                )
-
-    return daily
-
-
 async def get_user_daily_costs(
     session: AsyncSession,
     user_id: uuid.UUID,
     start_date: date | None = None,
     end_date: date | None = None,
-) -> list[AICostDaily]:
+) -> list[DailyCostSummary]:
     """
     Get daily cost aggregates for a user.
+
+    Aggregates are computed on-the-fly from ai_requests.
 
     Args:
         session: Database session
@@ -227,26 +153,68 @@ async def get_user_daily_costs(
         end_date: End date (defaults to today)
 
     Returns:
-        List of daily cost records.
+        List of daily cost summaries.
     """
     if end_date is None:
         end_date = date.today()
     if start_date is None:
-        from datetime import timedelta
         start_date = end_date - timedelta(days=30)
 
+    # Aggregate by date, provider, model
     stmt = (
-        select(AICostDaily)
-        .where(
-            AICostDaily.user_id == user_id,
-            AICostDaily.date >= start_date,
-            AICostDaily.date <= end_date,
+        select(
+            func.date(AIRequest.created_at).label("date"),
+            AIRequest.provider,
+            AIRequest.model,
+            func.count().label("total_requests"),
+            func.sum(func.cast(AIRequest.success, Integer)).label("successful_requests"),
+            func.sum(AIRequest.input_tokens).label("total_input_tokens"),
+            func.sum(AIRequest.output_tokens).label("total_output_tokens"),
+            func.sum(AIRequest.cached_tokens).label("total_cached_tokens"),
+            func.sum(AIRequest.input_cost_usd).label("total_input_cost_usd"),
+            func.sum(AIRequest.output_cost_usd).label("total_output_cost_usd"),
+            func.sum(AIRequest.total_cost_usd).label("total_cost_usd"),
+            func.avg(AIRequest.latency_ms).label("avg_latency_ms"),
         )
-        .order_by(AICostDaily.date.desc())
+        .where(
+            AIRequest.user_id == user_id,
+            func.date(AIRequest.created_at) >= start_date,
+            func.date(AIRequest.created_at) <= end_date,
+        )
+        .group_by(
+            func.date(AIRequest.created_at),
+            AIRequest.provider,
+            AIRequest.model,
+        )
+        .order_by(func.date(AIRequest.created_at).desc())
     )
 
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    rows = result.all()
+
+    summaries = []
+    for row in rows:
+        total = row.total_requests
+        successful = row.successful_requests or 0
+        summaries.append(
+            DailyCostSummary(
+                date=row.date,
+                provider=row.provider,
+                model=row.model,
+                total_requests=total,
+                successful_requests=successful,
+                failed_requests=total - successful,
+                total_input_tokens=row.total_input_tokens or 0,
+                total_output_tokens=row.total_output_tokens or 0,
+                total_cached_tokens=row.total_cached_tokens or 0,
+                total_input_cost_usd=row.total_input_cost_usd or Decimal("0"),
+                total_output_cost_usd=row.total_output_cost_usd or Decimal("0"),
+                total_cost_usd=row.total_cost_usd or Decimal("0"),
+                avg_latency_ms=int(row.avg_latency_ms) if row.avg_latency_ms else None,
+            )
+        )
+
+    return summaries
 
 
 async def get_user_total_cost(
@@ -261,23 +229,21 @@ async def get_user_total_cost(
     Args:
         session: Database session
         user_id: User ID
-        start_date: Start date
-        end_date: End date
+        start_date: Start date (defaults to today)
+        end_date: End date (defaults to today)
 
     Returns:
         Total cost in USD.
     """
-    from sqlalchemy import func
-
     if end_date is None:
         end_date = date.today()
     if start_date is None:
         start_date = end_date  # Just today
 
-    stmt = select(func.sum(AICostDaily.total_cost_usd)).where(
-        AICostDaily.user_id == user_id,
-        AICostDaily.date >= start_date,
-        AICostDaily.date <= end_date,
+    stmt = select(func.sum(AIRequest.total_cost_usd)).where(
+        AIRequest.user_id == user_id,
+        func.date(AIRequest.created_at) >= start_date,
+        func.date(AIRequest.created_at) <= end_date,
     )
 
     result = await session.execute(stmt)

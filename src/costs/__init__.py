@@ -11,6 +11,7 @@ from src.costs.pricing import (
     get_model_pricing,
 )
 from src.costs.tracker import (
+    DailyCostSummary,
     get_provider_from_model,
     get_recent_requests,
     get_user_daily_costs,
@@ -25,6 +26,7 @@ __all__ = [
     "calculate_cost",
     "get_model_pricing",
     # Tracking
+    "DailyCostSummary",
     "get_provider_from_model",
     "get_recent_requests",
     "get_user_daily_costs",
