@@ -1,37 +1,52 @@
 """
 Authentication routes.
 
-Uses FastAPI-Users for core authentication with custom invite code registration.
+Provides JWT authentication with database-backed refresh tokens.
 
 Endpoints:
-    POST /auth/register     - Register with invite code (custom)
-    POST /auth/jwt/login    - Login and get JWT token (FastAPI-Users)
-    POST /auth/jwt/logout   - Logout (FastAPI-Users)
-    GET  /auth/me           - Get current user info
+    POST /auth/register        - Register with invite code
+    POST /auth/login           - Login and get access + refresh tokens
+    POST /auth/refresh         - Get new access token using refresh token
+    POST /auth/logout          - Logout (revoke refresh token)
+    POST /auth/logout-all      - Logout all sessions
+    GET  /auth/me              - Get current user info
+    GET  /auth/sessions        - List active sessions
+    DELETE /auth/sessions/{id} - Revoke specific session
 """
 
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.refresh_tokens import (
+    create_refresh_token,
+    get_user_sessions,
+    revoke_all_user_tokens,
+    revoke_refresh_token,
+    rotate_refresh_token,
+    validate_refresh_token,
+)
 from src.auth.schemas import UserCreate, UserRead, UserUpdate
 from src.auth.users import (
     auth_backend,
     current_active_user,
     fastapi_users,
+    get_jwt_strategy,
     get_user_manager,
     UserManager,
 )
-from src.database import User, UserRole
+from src.database import get_session_dependency, RefreshToken, User, UserRole
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Auth"])
 
 
-# Custom registration endpoint with invite code validation
+# Request/Response schemas
 class RegisterRequest(UserCreate):
     """Registration request with invite code."""
     pass
@@ -47,11 +62,62 @@ class RegisterResponse(BaseModel):
     is_verified: bool
 
 
+class TokenResponse(BaseModel):
+    """Login response with access and refresh tokens."""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    """Refresh token request."""
+    refresh_token: str
+
+
+class AccessTokenResponse(BaseModel):
+    """Access token response (from refresh)."""
+    access_token: str
+    refresh_token: str  # Rotated refresh token
+    token_type: str = "bearer"
+
+
+class LogoutRequest(BaseModel):
+    """Logout request."""
+    refresh_token: str
+
+
+class SessionResponse(BaseModel):
+    """Session info response."""
+    id: str
+    created_at: str
+    expires_at: str
+    device_info: dict[str, Any] | None
+    is_current: bool = False
+
+
+class SessionListResponse(BaseModel):
+    """List of active sessions."""
+    sessions: list[SessionResponse]
+    count: int
+
+
+class MessageResponse(BaseModel):
+    """Simple message response."""
+    message: str
+
+
+def _get_device_info(request: Request) -> dict[str, Any]:
+    """Extract device info from request for session tracking."""
+    return {
+        "ip": request.client.host if request.client else None,
+        "user_agent": request.headers.get("user-agent"),
+    }
+
+
 @router.post(
     "/register",
     response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
-    name="register:register",
 )
 async def register(
     request: Request,
@@ -88,7 +154,7 @@ async def register(
         # Create user using FastAPI-Users
         created_user = await user_manager.create(
             user_create,
-            safe=True,  # Ignores is_superuser, is_verified from request unless we set them
+            safe=True,
             request=request,
         )
     except Exception as e:
@@ -120,16 +186,149 @@ async def register(
     )
 
 
-# Include FastAPI-Users routes
-router.include_router(
-    fastapi_users.get_auth_router(auth_backend),
-    prefix="/jwt",
-    tags=["auth"],
-)
+@router.post("/login", response_model=TokenResponse)
+async def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    user_manager: UserManager = Depends(get_user_manager),
+    session: AsyncSession = Depends(get_session_dependency),
+):
+    """
+    Login and receive access + refresh tokens.
+
+    Use form data: username (email) and password.
+    """
+    # Authenticate user
+    user = await user_manager.authenticate(
+        credentials=form_data,
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is disabled",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Generate access token using FastAPI-Users JWT strategy
+    jwt_strategy = get_jwt_strategy()
+    access_token = await jwt_strategy.write_token(user)
+
+    # Generate refresh token
+    device_info = _get_device_info(request)
+    refresh_token_plain, _ = await create_refresh_token(
+        session, user, device_info=device_info
+    )
+
+    # Trigger on_after_login
+    await user_manager.on_after_login(user, request)
+
+    logger.info(f"User logged in: {user.email}")
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token_plain,
+    )
 
 
-# Current user endpoint
-@router.get("/me", response_model=UserRead, tags=["auth"])
+@router.post("/refresh", response_model=AccessTokenResponse)
+async def refresh_tokens(
+    request: Request,
+    refresh_request: RefreshRequest,
+    session: AsyncSession = Depends(get_session_dependency),
+):
+    """
+    Get a new access token using a refresh token.
+
+    The refresh token is rotated (old one invalidated, new one returned).
+    """
+    # Validate refresh token
+    refresh_token = await validate_refresh_token(session, refresh_request.refresh_token)
+
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Load user
+    from sqlalchemy import select
+    result = await session.execute(
+        select(User).where(User.id == refresh_token.user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or disabled",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Generate new access token
+    jwt_strategy = get_jwt_strategy()
+    access_token = await jwt_strategy.write_token(user)
+
+    # Rotate refresh token (revoke old, create new)
+    device_info = _get_device_info(request)
+    new_refresh_token_plain, _ = await rotate_refresh_token(
+        session, refresh_token, device_info=device_info
+    )
+
+    logger.info(f"Tokens refreshed for user: {user.email}")
+
+    return AccessTokenResponse(
+        access_token=access_token,
+        refresh_token=new_refresh_token_plain,
+    )
+
+
+@router.post("/logout", response_model=MessageResponse)
+async def logout(
+    logout_request: LogoutRequest,
+    session: AsyncSession = Depends(get_session_dependency),
+):
+    """
+    Logout by revoking the refresh token.
+
+    The access token will remain valid until it expires (short-lived).
+    """
+    success = await revoke_refresh_token(session, logout_request.refresh_token)
+
+    if not success:
+        # Don't reveal if token existed or not
+        logger.warning("Logout attempted with invalid token")
+
+    return MessageResponse(message="Logged out successfully")
+
+
+@router.post("/logout-all", response_model=MessageResponse)
+async def logout_all_sessions(
+    user: Annotated[User, Depends(current_active_user)],
+    session: AsyncSession = Depends(get_session_dependency),
+    keep_current: bool = False,
+    current_refresh_token: str | None = None,
+):
+    """
+    Logout from all sessions (revoke all refresh tokens).
+
+    Optionally keep the current session by providing the current refresh token.
+    """
+    except_token = current_refresh_token if keep_current else None
+    count = await revoke_all_user_tokens(session, user.id, except_token=except_token)
+
+    return MessageResponse(message=f"Logged out from {count} session(s)")
+
+
+@router.get("/me", response_model=UserRead)
 async def get_current_user_info(
     user: Annotated[User, Depends(current_active_user)],
 ):
@@ -137,9 +336,77 @@ async def get_current_user_info(
     return user
 
 
+@router.get("/sessions", response_model=SessionListResponse)
+async def list_sessions(
+    user: Annotated[User, Depends(current_active_user)],
+    session: AsyncSession = Depends(get_session_dependency),
+):
+    """List all active sessions for the current user."""
+    sessions = await get_user_sessions(session, user.id)
+
+    return SessionListResponse(
+        sessions=[
+            SessionResponse(
+                id=str(s.id),
+                created_at=s.created_at.isoformat(),
+                expires_at=s.expires_at.isoformat(),
+                device_info=s.device_info,
+            )
+            for s in sessions
+        ],
+        count=len(sessions),
+    )
+
+
+@router.delete("/sessions/{session_id}", response_model=MessageResponse)
+async def revoke_session(
+    session_id: str,
+    user: Annotated[User, Depends(current_active_user)],
+    session: AsyncSession = Depends(get_session_dependency),
+):
+    """Revoke a specific session by ID."""
+    from sqlalchemy import select
+    import uuid
+
+    try:
+        token_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid session ID",
+        )
+
+    result = await session.execute(
+        select(RefreshToken).where(
+            RefreshToken.id == token_uuid,
+            RefreshToken.user_id == user.id,
+        )
+    )
+    refresh_token = result.scalar_one_or_none()
+
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    if refresh_token.is_revoked:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session already revoked",
+        )
+
+    refresh_token.revoke()
+    await session.commit()
+
+    logger.info(f"User {user.email} revoked session {session_id}")
+
+    return MessageResponse(message="Session revoked")
+
+
 # User management routes (for admins or self-management)
 router.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
     prefix="/users",
-    tags=["users"],
+    tags=["Users"],
 )

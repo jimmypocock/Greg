@@ -19,6 +19,7 @@ from src.database.models import (
     DocumentStatus,
     Invite,
     LLMProvider,
+    RefreshToken,
     RequestType,
     TimestampMixin,
     User,
@@ -44,4 +45,5 @@ __all__ = [
     "Document",
     "DocumentStatus",
     "DocumentChunk",
+    "RefreshToken",
 ]

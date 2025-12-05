@@ -16,6 +16,7 @@ from src.database.models.base import Base, TimestampMixin
 if TYPE_CHECKING:
     from src.database.models.api_key import APIKey
     from src.database.models.invite import Invite
+    from src.database.models.refresh_token import RefreshToken
 
 
 class UserRole(str, PyEnum):
@@ -51,6 +52,11 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
         "Invite",
         back_populates="created_by_user",
         foreign_keys="Invite.created_by",
+    )
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        "RefreshToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
 
     @property

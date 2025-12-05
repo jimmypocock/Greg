@@ -27,7 +27,6 @@ from src.database import User, UserRole, get_session_dependency, Invite
 # Configuration
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY", secrets.token_urlsafe(32))
 ACCESS_TOKEN_EXPIRE_SECONDS = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "15")) * 60
-REFRESH_TOKEN_EXPIRE_SECONDS = int(os.environ.get("REFRESH_TOKEN_EXPIRE_DAYS", "7")) * 86400
 
 
 async def get_user_db(session: AsyncSession = Depends(get_session_dependency)):
@@ -113,7 +112,7 @@ async def get_user_manager(
 
 
 # Authentication backends
-bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
+bearer_transport = BearerTransport(tokenUrl="auth/login")
 
 
 def get_jwt_strategy() -> JWTStrategy:

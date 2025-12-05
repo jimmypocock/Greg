@@ -5,6 +5,7 @@ Uses FastAPI-Users for core authentication with custom extensions for:
 - API key authentication
 - Invite code registration
 - Role-based authorization
+- Database-backed refresh tokens
 """
 
 from src.auth.tokens import (
@@ -26,6 +27,7 @@ from src.auth.users import (
     current_superuser,
     current_verified_user,
     fastapi_users,
+    get_jwt_strategy,
     get_user_manager,
     optional_current_user,
     UserManager,
@@ -34,6 +36,15 @@ from src.auth.schemas import (
     UserCreate,
     UserRead,
     UserUpdate,
+)
+from src.auth.refresh_tokens import (
+    create_refresh_token,
+    validate_refresh_token,
+    rotate_refresh_token,
+    revoke_refresh_token,
+    revoke_all_user_tokens,
+    get_user_sessions,
+    cleanup_expired_tokens,
 )
 
 __all__ = [
@@ -56,10 +67,19 @@ __all__ = [
     "current_superuser",
     "current_verified_user",
     "optional_current_user",
+    "get_jwt_strategy",
     "get_user_manager",
     "UserManager",
     # Schemas
     "UserCreate",
     "UserRead",
     "UserUpdate",
+    # Refresh tokens
+    "create_refresh_token",
+    "validate_refresh_token",
+    "rotate_refresh_token",
+    "revoke_refresh_token",
+    "revoke_all_user_tokens",
+    "get_user_sessions",
+    "cleanup_expired_tokens",
 ]

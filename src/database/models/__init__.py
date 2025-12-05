@@ -11,6 +11,7 @@ from src.database.models.api_key import APIKey
 from src.database.models.ai_request import AIRequest, LLMProvider, RequestType
 from src.database.models.document import Document, DocumentStatus
 from src.database.models.document_chunk import DocumentChunk
+from src.database.models.refresh_token import RefreshToken
 
 __all__ = [
     # Base
@@ -32,4 +33,6 @@ __all__ = [
     "DocumentStatus",
     # Document Chunk
     "DocumentChunk",
+    # Refresh Token
+    "RefreshToken",
 ]
