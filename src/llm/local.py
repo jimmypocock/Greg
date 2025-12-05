@@ -3,16 +3,14 @@ import json
 import time
 from typing import Dict, List, Optional
 import ollama
-from langchain_community.llms import Ollama as LangchainOllama
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_ollama import OllamaLLM
 from src.config.settings import Config
 import torch
-from src.vectorstore.embeddings import MemorySafeEmbeddings
 
 class OptimizedLLM:
     def __init__(self, config: Config, model_name: Optional[str] = None):
         self.config = config
-        self.model_name = model_name or config.LOCAL_LLM_MODEL
+        self.model_name = model_name or config.LLM_MODEL
         self.model_config = self._load_model_config()
         self.setup_environment()
         self.llm = self._initialize_llm()
@@ -108,12 +106,24 @@ class OptimizedLLM:
 
         # Check if model is available
         try:
-            available_models = [m['name'] for m in ollama.list()['models']]
+            ollama_response = ollama.list()
+            # Handle both old and new ollama API formats
+            models_list = ollama_response.get("models", [])
+            available_models = []
+            for m in models_list:
+                # New API uses .name attribute, old uses dict
+                if hasattr(m, "name"):
+                    available_models.append(m.name)
+                elif isinstance(m, dict):
+                    available_models.append(m.get("name", ""))
+                else:
+                    available_models.append(str(m))
+
             if not any(model in m for m in available_models):
                 # Don't automatically pull models - use default instead
                 print(f"Model {model} not found. Falling back to llama3...")
                 model = "llama3"
-                
+
                 # Check if llama3 is available
                 if not any("llama3" in m for m in available_models):
                     # Try mistral as last resort
@@ -126,7 +136,7 @@ class OptimizedLLM:
                         )
         except Exception as e:
             print(f"Error checking models: {e}")
-            model = self.config.LOCAL_LLM_MODEL
+            model = self.config.LLM_MODEL
 
         # Get model-specific parameters
         model_params = self._get_model_parameters(model)
@@ -140,7 +150,7 @@ class OptimizedLLM:
         
         # Create LLM instance with model-specific parameters
         try:
-            return LangchainOllama(
+            return OllamaLLM(
                 model=model,
                 temperature=self.config.TEMPERATURE,
                 top_p=self.config.TOP_P,
@@ -150,8 +160,8 @@ class OptimizedLLM:
             # If initialization fails, try with minimal parameters
             print(f"Failed to initialize {model} with full parameters: {e}")
             print("Retrying with minimal parameters...")
-            
-            return LangchainOllama(
+
+            return OllamaLLM(
                 model=model,
                 temperature=self.config.TEMPERATURE,
                 top_p=self.config.TOP_P,
@@ -159,45 +169,12 @@ class OptimizedLLM:
             )
 
     def _initialize_embeddings(self):
-        """Initialize local embeddings optimized for M3 with memory safety"""
-        # Suppress tokenization warnings
-        import warnings
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message=".*clean_up_tokenization_spaces.*")
-            
-            # Use sentence-transformers with Apple Silicon optimization
-            # Set local_files_only in model_kwargs to prevent HTTP requests
-            try:
-                base_embeddings = HuggingFaceEmbeddings(
-                    model_name=self.config.EMBEDDING_MODEL,
-                    model_kwargs={
-                        'device': 'cpu',  # Force CPU to avoid GPU memory issues
-                        'trust_remote_code': False,  # Disable automatic model updates
-                        'local_files_only': True  # Force using local cache only
-                    },
-                    encode_kwargs={
-                        'normalize_embeddings': True,
-                        'batch_size': getattr(self.config, 'EMBEDDING_BATCH_SIZE', 2)
-                    }
-                )
-                # Wrap with memory-safe version
-                return MemorySafeEmbeddings(base_embeddings, batch_size=getattr(self.config, 'EMBEDDING_BATCH_SIZE', 2))
-            except Exception as e:
-                # If local_files_only fails, try without it but with offline mode
-                print(f"Warning: Could not load embeddings with local_files_only: {e}")
-                base_embeddings = HuggingFaceEmbeddings(
-                    model_name=self.config.EMBEDDING_MODEL,
-                    model_kwargs={
-                        'device': 'cpu',  # Force CPU to avoid GPU memory issues
-                        'trust_remote_code': False
-                    },
-                    encode_kwargs={
-                        'normalize_embeddings': True,
-                        'batch_size': getattr(self.config, 'EMBEDDING_BATCH_SIZE', 2)
-                    }
-                )
-                # Wrap with memory-safe version
-                return MemorySafeEmbeddings(base_embeddings, batch_size=getattr(self.config, 'EMBEDDING_BATCH_SIZE', 2))
+        """Initialize embeddings using the embedding factory"""
+        from src.llm.embeddings import get_embeddings
+        return get_embeddings(
+            provider=self.config.EMBEDDING_PROVIDER,
+            model=self.config.EMBEDDING_MODEL,
+        )
     def get_llm(self):
         return self.llm
 

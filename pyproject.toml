@@ -13,13 +13,12 @@ dependencies = [
     # LangChain Ecosystem (v1.1.x - December 2025)
     "langchain>=1.1.0",
     "langchain-core>=1.1.0",
-    "langchain-classic>=1.0.0",  # Legacy chains (RetrievalQA, LLMChain, etc.)
     "langchain-community>=0.4.1",
     "langchain-text-splitters>=1.0.0",
     "langchain-huggingface>=0.1.0",
     "langchain-ollama>=0.2.0",
-    # Vector Store
-    "faiss-cpu>=1.13.0",
+    "langchain-openai>=0.2.0",  # OpenAI embeddings
+    # Embeddings
     "sentence-transformers>=5.1.2",
     # LLM Providers
     "anthropic>=0.75.0",

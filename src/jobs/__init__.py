@@ -9,12 +9,12 @@ For Redis-backed queue (production):
     - Use enqueue_job() to add jobs to queue
 
 For in-memory processing (development):
-    - Use process_document_async() directly with asyncio.create_task()
+    - Use process_document_job() directly with asyncio.create_task()
 """
 
 from src.jobs.manager import JobManager, job_manager
 from src.jobs.models import JobInfo, JobProgress, JobStatus, JobType
-from src.jobs.document_worker import process_document_async, process_url_async
+from src.jobs.document_worker import process_document_job, process_url_job
 from src.jobs.queue import (
     enqueue_job,
     get_redis_pool,
@@ -31,9 +31,9 @@ __all__ = [
     "JobProgress",
     "JobStatus",
     "JobType",
-    # In-memory processing
-    "process_document_async",
-    "process_url_async",
+    # Document processing
+    "process_document_job",
+    "process_url_job",
     # Redis queue
     "enqueue_job",
     "get_redis_pool",

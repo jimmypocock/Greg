@@ -5,6 +5,8 @@ Run with: uv run arq src.jobs.worker.WorkerSettings
 """
 
 import logging
+import uuid
+from pathlib import Path
 from typing import Any
 
 from arq import cron
@@ -12,40 +14,33 @@ from arq.connections import RedisSettings
 
 from src.jobs.queue import get_redis_settings
 from src.jobs.manager import job_manager
-from src.jobs.models import JobType
 
 logger = logging.getLogger(__name__)
 
 
-async def process_document_job(
+async def process_document_arq(
     ctx: dict[str, Any],
     job_id: str,
+    document_id: str,
     file_path: str,
-    filename: str,
     chunk_size: int,
 ) -> dict[str, Any]:
     """
-    Process a document upload job.
+    Process a document upload job via ARQ worker.
 
     This is called by the ARQ worker when a document upload is queued.
     """
-    from pathlib import Path
-    from src.jobs.document_worker import process_document_async
-    from src.api.dependencies import get_doc_processor
+    from src.jobs.document_worker import process_document_job
 
-    logger.info(f"Worker processing document job {job_id}: {filename}")
+    logger.info(f"Worker processing document job {job_id}")
 
     try:
-        doc_processor = get_doc_processor()
-
-        result = await process_document_async(
+        result = await process_document_job(
             job_id=job_id,
+            document_id=uuid.UUID(document_id),
             file_path=Path(file_path),
-            filename=filename,
             chunk_size=chunk_size,
-            doc_processor=doc_processor,
         )
-
         return result
 
     except Exception as e:
@@ -54,34 +49,29 @@ async def process_document_job(
         raise
 
 
-async def process_url_job(
+async def process_url_arq(
     ctx: dict[str, Any],
     job_id: str,
+    document_id: str,
     url: str,
     chunk_size: int,
 ) -> dict[str, Any]:
     """
-    Process a URL processing job.
+    Process a URL processing job via ARQ worker.
 
     This is called by the ARQ worker when a URL processing is queued.
     """
-    from src.jobs.document_worker import process_url_async
-    from src.api.dependencies import get_config, get_doc_processor
+    from src.jobs.document_worker import process_url_job
 
     logger.info(f"Worker processing URL job {job_id}: {url}")
 
     try:
-        config = get_config()
-        doc_processor = get_doc_processor()
-
-        result = await process_url_async(
+        result = await process_url_job(
             job_id=job_id,
+            document_id=uuid.UUID(document_id),
             url=url,
             chunk_size=chunk_size,
-            config=config,
-            doc_processor=doc_processor,
         )
-
         return result
 
     except Exception as e:
@@ -120,8 +110,8 @@ class WorkerSettings:
 
     # Job functions
     functions = [
-        process_document_job,
-        process_url_job,
+        process_document_arq,
+        process_url_arq,
     ]
 
     # Cron jobs

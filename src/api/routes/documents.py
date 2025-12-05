@@ -5,39 +5,29 @@ Endpoints:
     POST   /documents         - Upload and process a document (async with job)
     POST   /documents/url     - Process a URL as a document (async with job)
     GET    /documents         - List all documents
+    GET    /documents/{id}    - Get document details
     DELETE /documents/{id}    - Delete a document
-    DELETE /documents         - Clear all documents
+    DELETE /documents         - Clear all documents (admin only)
 """
 
 import asyncio
-import os
-import json
-import shutil
 import logging
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File, Form
+from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.schemas import UploadResponse, URLProcessRequest, MessageResponse, JobCreatedResponse
-from src.api.dependencies import get_config, get_doc_processor
+from src.api.schemas import URLProcessRequest, JobCreatedResponse
+from src.api.dependencies import get_config, get_db
 from src.api.rate_limit import limiter
 from src.auth import CurrentUser, AdminUser
 from src.config.settings import Config
-from src.database import User
-from src.documents.processor import DocumentProcessor
-from src.config.errors import ErrorMessages
+from src.database.models import Document, DocumentStatus, DocumentChunk
 from src.security.sanitization import sanitize_filename, create_safe_file_path, is_safe_url
-from src.jobs import job_manager, JobType, process_document_async, process_url_async
-from src.utils.async_io import (
-    write_file_async,
-    delete_file_async,
-    load_json_async,
-    file_exists_async,
-    delete_directory_async,
-    read_file_async,
-    process_files_batch_async,
-)
+from src.jobs import job_manager, JobType
+from src.utils.async_io import write_file_async, delete_file_async
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +39,10 @@ router = APIRouter()
 async def upload_document(
     request: Request,
     user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
     chunk_size: int = Form(800),
     config: Config = Depends(get_config),
-    doc_processor: DocumentProcessor = Depends(get_doc_processor),
 ):
     """
     Upload and process a document asynchronously.
@@ -61,24 +51,6 @@ async def upload_document(
     to receive real-time progress updates.
 
     Supports: PDF, TXT, CSV, MD, DOCX, XLSX, PNG, JPG
-
-    Example with curl:
-        curl -X POST "http://localhost:8080/documents" \\
-            -F "file=@document.pdf" \\
-            -F "chunk_size=800"
-
-    Response:
-        {
-            "job_id": "uuid",
-            "status": "pending",
-            "message": "Processing started",
-            "websocket_url": "ws://localhost:8080/ws/jobs/{job_id}"
-        }
-
-    WebSocket progress events:
-        {"type": "job.progress", "job_id": "...", "data": {"stage": "...", "percent": 50}}
-        {"type": "job.completed", "job_id": "...", "data": {"result": {...}}}
-        {"type": "job.failed", "job_id": "...", "data": {"error": "..."}}
     """
     # Sanitize filename
     safe_filename = sanitize_filename(file.filename)
@@ -94,7 +66,11 @@ async def upload_document(
             detail=f"Unsupported file type: {file_ext}. Allowed: {', '.join(allowed_extensions)}",
         )
 
-    # Create safe file path
+    # Read file content
+    content = await file.read()
+    file_size = len(content)
+
+    # Create safe file path for storage
     unique_filename = f"{uuid.uuid4().hex[:8]}_{safe_filename}"
     safe_path = create_safe_file_path(unique_filename, config.UPLOAD_DIR)
 
@@ -102,25 +78,39 @@ async def upload_document(
         raise HTTPException(status_code=500, detail="Could not create upload path")
 
     try:
-        # Read and write file immediately
-        content = await file.read()
+        # Write file to disk
         await write_file_async(safe_path, content, mode="wb")
+
+        # Create document record in database
+        document = Document(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            name=safe_filename,
+            file_type=file_ext.lstrip("."),
+            file_size=file_size,
+            storage_key=str(safe_path),
+            status=DocumentStatus.PENDING,
+        )
+        db.add(document)
+        await db.commit()
+        await db.refresh(document)
 
         # Create a job for tracking
         job = await job_manager.create_job(JobType.DOCUMENT_UPLOAD)
 
         # Start background processing
+        from src.jobs.document_worker import process_document_job
+
         asyncio.create_task(
-            process_document_async(
+            process_document_job(
                 job_id=job.job_id,
+                document_id=document.id,
                 file_path=safe_path,
-                filename=safe_filename,
                 chunk_size=chunk_size,
-                doc_processor=doc_processor,
             )
         )
 
-        logger.info(f"Started upload job {job.job_id} for {safe_filename}")
+        logger.info(f"Started upload job {job.job_id} for {safe_filename} (doc_id: {document.id})")
 
         # Build WebSocket URL from request
         ws_scheme = "wss" if request.url.scheme == "https" else "ws"
@@ -138,8 +128,7 @@ async def upload_document(
         if safe_path and safe_path.exists():
             safe_path.unlink()
         logger.error(f"Error starting upload job: {e}")
-        error_msg = ErrorMessages.get_specific_error(e, {"context": "upload"})
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/documents/url", response_model=JobCreatedResponse, status_code=202)
@@ -148,22 +137,14 @@ async def process_url(
     request: Request,
     user: CurrentUser,
     url_request: URLProcessRequest,
+    db: AsyncSession = Depends(get_db),
     config: Config = Depends(get_config),
-    doc_processor: DocumentProcessor = Depends(get_doc_processor),
 ):
     """
     Process a URL asynchronously by fetching and converting its content.
 
     Returns immediately with a job_id. Connect to the WebSocket endpoint
     to receive real-time progress updates.
-
-    Response:
-        {
-            "job_id": "uuid",
-            "status": "pending",
-            "message": "Processing started",
-            "websocket_url": "ws://localhost:8080/ws/jobs/{job_id}"
-        }
     """
     # Validate URL
     if not is_safe_url(url_request.url):
@@ -173,17 +154,38 @@ async def process_url(
         )
 
     try:
+        # Create document record for URL
+        from urllib.parse import urlparse
+
+        parsed_url = urlparse(url_request.url)
+        url_filename = f"web_{parsed_url.netloc}_{uuid.uuid4().hex[:8]}.txt"
+
+        document = Document(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            name=url_filename,
+            file_type="url",
+            file_size=0,  # Will be updated after fetch
+            storage_key=url_request.url,  # Store URL as storage key
+            status=DocumentStatus.PENDING,
+            extra_metadata={"source_url": url_request.url},
+        )
+        db.add(document)
+        await db.commit()
+        await db.refresh(document)
+
         # Create a job for tracking
         job = await job_manager.create_job(JobType.URL_PROCESS)
 
         # Start background processing
+        from src.jobs.document_worker import process_url_job
+
         asyncio.create_task(
-            process_url_async(
+            process_url_job(
                 job_id=job.job_id,
+                document_id=document.id,
                 url=url_request.url,
                 chunk_size=url_request.chunk_size,
-                config=config,
-                doc_processor=doc_processor,
             )
         )
 
@@ -204,145 +206,137 @@ async def process_url(
         raise
     except Exception as e:
         logger.error(f"Error starting URL processing job: {e}")
-        error_msg = ErrorMessages.get_specific_error(e, {"context": "url_processing"})
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/documents")
-async def list_documents(user: CurrentUser, config: Config = Depends(get_config)):
-    """List all processed documents."""
-    try:
-        return await _list_documents_impl(config)
-    except Exception as e:
-        logger.error(f"Error listing documents: {e}")
-        from src.security.sanitization import sanitize_error_message
+async def list_documents(
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all documents for the current user."""
+    stmt = (
+        select(Document)
+        .where(Document.user_id == user.id)
+        .order_by(Document.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    documents = result.scalars().all()
 
-        error_msg = sanitize_error_message(e, show_details=False)
-        raise HTTPException(status_code=500, detail=error_msg)
-
-
-async def _list_documents_impl(config: Config):
-    """Implementation of list documents."""
-    # Check for unified store first
-    unified_metadata_path = config.VECTOR_STORE_DIR / "unified_store.metadata"
-    if unified_metadata_path.exists():
-        # Load unified store metadata
-        unified_metadata = await load_json_async(unified_metadata_path)
-
-        # Convert unified store format to document list format
-        documents = []
-        for doc in unified_metadata.get("documents", []):
-            documents.append(
-                {
-                    "document_id": "unified",
-                    "filename": doc["filename"],
-                    "pages": doc["pages"],
-                    "chunks": doc["chunks"],
-                    "upload_date": unified_metadata["creation_date"],
-                    "model_used": unified_metadata["model_used"],
-                }
-            )
-
-        return {"documents": documents}
-
-    # Fallback to individual document stores
-    async def load_metadata(metadata_file):
-        # Skip unified store metadata
-        if metadata_file.name == "unified_store.metadata":
-            return None
-
-        try:
-            # Try JSON first (new format)
-            metadata = await load_json_async(metadata_file)
-            return {
-                "document_id": metadata["document_id"],
-                "filename": metadata["filename"],
-                "pages": metadata["pages"],
-                "chunks": metadata.get("chunks", "N/A"),
-                "upload_date": metadata["upload_date"],
-                "model_used": metadata["model_used"],
+    return {
+        "documents": [
+            {
+                "id": str(doc.id),
+                "name": doc.name,
+                "file_type": doc.file_type,
+                "file_size": doc.file_size,
+                "status": doc.status.value,
+                "chunk_count": doc.chunk_count,
+                "error_message": doc.error_message,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                "extra_metadata": doc.extra_metadata,
             }
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            # Fallback to pickle for old files
-            import pickle
+            for doc in documents
+        ]
+    }
 
-            content = await read_file_async(metadata_file, mode="rb")
-            metadata = pickle.loads(content)
-            return {
-                "document_id": metadata["document_id"],
-                "filename": metadata["filename"],
-                "pages": metadata["pages"],
-                "chunks": metadata.get("chunks", "N/A"),
-                "upload_date": metadata["upload_date"].isoformat(),
-                "model_used": metadata["model_used"],
-            }
 
-    # Process all metadata files concurrently
-    metadata_files = list(config.VECTOR_STORE_DIR.glob("*.metadata"))
-    results = await process_files_batch_async(metadata_files, load_metadata, max_concurrent=10)
-    documents = [doc for doc in results if doc is not None]
+@router.get("/documents/{document_id}")
+async def get_document(
+    document_id: uuid.UUID,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get details for a specific document."""
+    stmt = select(Document).where(
+        Document.id == document_id,
+        Document.user_id == user.id,
+    )
+    result = await db.execute(stmt)
+    document = result.scalar_one_or_none()
 
-    return {"documents": documents}
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return {
+        "id": str(document.id),
+        "name": document.name,
+        "file_type": document.file_type,
+        "file_size": document.file_size,
+        "status": document.status.value,
+        "chunk_count": document.chunk_count,
+        "total_tokens": document.total_tokens,
+        "error_message": document.error_message,
+        "created_at": document.created_at.isoformat() if document.created_at else None,
+        "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+        "extra_metadata": document.extra_metadata,
+    }
 
 
 @router.delete("/documents/{document_id}")
-async def delete_document(document_id: str, user: CurrentUser, config: Config = Depends(get_config)):
-    """Delete a specific document."""
+async def delete_document(
+    document_id: uuid.UUID,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    config: Config = Depends(get_config),
+):
+    """Delete a specific document and its chunks."""
+    # Find document
+    stmt = select(Document).where(
+        Document.id == document_id,
+        Document.user_id == user.id,
+    )
+    result = await db.execute(stmt)
+    document = result.scalar_one_or_none()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
     try:
-        deleted_something = False
+        # Delete file from disk if it exists
+        if document.storage_key and not document.storage_key.startswith("http"):
+            file_path = Path(document.storage_key)
+            if file_path.exists():
+                await delete_file_async(file_path)
 
-        # Delete vector store (it's a directory)
-        vector_store_path = config.VECTOR_STORE_DIR / f"{document_id}.faiss"
-        if await file_exists_async(vector_store_path) and vector_store_path.is_dir():
-            await delete_directory_async(vector_store_path)
-            deleted_something = True
-            logger.info(f"Deleted vector store for document: {document_id}")
+        # Delete document (chunks cascade automatically)
+        await db.delete(document)
+        await db.commit()
 
-        # Delete metadata
-        metadata_path = config.VECTOR_STORE_DIR / f"{document_id}.metadata"
-        if await file_exists_async(metadata_path):
-            await delete_file_async(metadata_path)
-            deleted_something = True
-            logger.info(f"Deleted metadata for document: {document_id}")
-
-        if not deleted_something:
-            raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
-
-        logger.info(f"Successfully deleted document: {document_id}")
+        logger.info(f"Deleted document {document_id}")
         return {"message": f"Document {document_id} deleted successfully"}
 
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error deleting document {document_id}: {e}", exc_info=True)
-        from src.security.sanitization import sanitize_error_message
-
-        error_msg = sanitize_error_message(e, show_details=False)
-        raise HTTPException(status_code=500, detail=error_msg)
+        await db.rollback()
+        logger.error(f"Error deleting document {document_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/documents")
-async def clear_all_documents(admin: AdminUser, config: Config = Depends(get_config)):
-    """Clear all documents and reset the system. Admin only."""
+async def clear_all_documents(
+    admin: AdminUser,
+    db: AsyncSession = Depends(get_db),
+    config: Config = Depends(get_config),
+):
+    """Clear all documents and chunks. Admin only."""
     try:
-        # Clear all files in vector store directory
-        for file in config.VECTOR_STORE_DIR.glob("*"):
-            if file.is_file():
-                os.remove(file)
-            elif file.is_dir():
-                shutil.rmtree(file)
+        # Delete all chunks first (for safety, even though cascade should handle it)
+        await db.execute(delete(DocumentChunk))
 
-        # Clear uploads directory
+        # Delete all documents
+        await db.execute(delete(Document))
+
+        await db.commit()
+
+        # Clean upload directory
         for file in config.UPLOAD_DIR.glob("*"):
             if file.is_file():
-                os.remove(file)
+                file.unlink()
 
         logger.info("Cleared all documents")
         return {"message": "All documents cleared successfully"}
 
     except Exception as e:
+        await db.rollback()
         logger.error(f"Error clearing documents: {e}")
-        from src.security.sanitization import sanitize_error_message
-
-        error_msg = sanitize_error_message(e, show_details=False)
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(status_code=500, detail=str(e))

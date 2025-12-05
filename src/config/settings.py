@@ -7,11 +7,19 @@ load_dotenv()
 
 class Config:
     # LLM Settings
-    USE_LOCAL_LLM = True  # Always true for free version
-    LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "mistral:latest")
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
+    LLM_MODEL = os.getenv("LLM_MODEL", "mistral")
+    # Legacy alias for backwards compatibility
+    LOCAL_LLM_MODEL = LLM_MODEL
 
-    # Embedding model - using local sentence transformers
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    # Embedding settings
+    # Provider: "openai" (1536 dim, paid) or "local" (384 dim, free)
+    # Auto-detects based on OPENAI_API_KEY if not specified
+    EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER")  # None = auto-detect
+    # Model: depends on provider
+    # - OpenAI: text-embedding-3-small (default), text-embedding-ada-002, text-embedding-3-large
+    # - Local: all-MiniLM-L6-v2 (default), all-mpnet-base-v2, etc.
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")  # None = provider default
 
     # Directories
     UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./uploads"))
@@ -45,32 +53,32 @@ class Config:
 
     @classmethod
     def get_optimal_settings(cls):
-        """Get optimal settings based on available memory"""
+        """Get optimal settings based on available memory."""
         try:
             import psutil
             available_memory = psutil.virtual_memory().available / (1024**3)  # GB
 
             if available_memory < 4:
                 return {
-                    "model": "mistral",  # Use mistral even for low memory
+                    "model": cls.LLM_MODEL,
                     "chunk_size": 500,
-                    "batch_size": 2
+                    "batch_size": 2,
                 }
             elif available_memory < 8:
                 return {
-                    "model": "mistral",
+                    "model": cls.LLM_MODEL,
                     "chunk_size": 800,
-                    "batch_size": 4
+                    "batch_size": 4,
                 }
             else:
                 return {
-                    "model": "mistral",  # Use mistral by default
+                    "model": cls.LLM_MODEL,
                     "chunk_size": 1000,
-                    "batch_size": 8
+                    "batch_size": 8,
                 }
-        except:
+        except Exception:
             return {
-                "model": cls.LOCAL_LLM_MODEL,
+                "model": cls.LLM_MODEL,
                 "chunk_size": cls.CHUNK_SIZE,
-                "batch_size": cls.BATCH_SIZE
+                "batch_size": cls.BATCH_SIZE,
             }

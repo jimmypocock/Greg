@@ -23,6 +23,8 @@ from src.api.routes import (
     documents,
     health,
     jobs,
+    models,
+    root,
     search,
     storage,
     websocket,
@@ -95,8 +97,14 @@ def _configure_rate_limiting(app: FastAPI) -> None:
 
 def _register_routes(app: FastAPI) -> None:
     """Register all route modules."""
-    # Health and info routes (no prefix, public)
-    app.include_router(health.router, tags=["Health"])
+    # Root route (public)
+    app.include_router(root.router)
+
+    # Health route (public)
+    app.include_router(health.router)
+
+    # Models route (public)
+    app.include_router(models.router)
 
     # Authentication routes (public)
     app.include_router(auth.router)

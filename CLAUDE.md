@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Greg is a production-ready RAG (Retrieval-Augmented Generation) system with:
 
 1. **FastAPI Backend** (port 8080): Document processing, vector storage, Q&A, authentication
-2. **PostgreSQL**: User accounts, invites, API keys, sessions
+2. **PostgreSQL + pgvector**: User accounts, sessions, documents, vector embeddings
 3. **Redis + ARQ**: Background job queue for document processing
 4. **Ollama** (port 11434): Local LLM inference (Mistral, Llama, Phi, Deepseek)
 5. **WebSocket**: Real-time progress updates for long-running jobs
@@ -50,11 +50,14 @@ All commands use the `greg` CLI (via `uv run greg <command>`):
 ### Authentication
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/auth/signup` | POST | None | Register (invite code required) |
-| `/auth/login` | POST | None | Login, get JWT tokens |
-| `/auth/refresh` | POST | Refresh Token | Refresh access token |
-| `/auth/logout` | POST | JWT | Logout, revoke tokens |
+| `/auth/register` | POST | None | Register (first user = admin, others need invite) |
+| `/auth/login` | POST | None | Login, get access + refresh tokens |
+| `/auth/refresh` | POST | None | Exchange refresh token for new tokens |
+| `/auth/logout` | POST | None | Revoke refresh token |
+| `/auth/logout-all` | POST | JWT | Revoke all sessions |
 | `/auth/me` | GET | JWT | Get current user profile |
+| `/auth/sessions` | GET | JWT | List active sessions |
+| `/auth/sessions/{id}` | DELETE | JWT | Revoke specific session |
 
 ### Documents
 | Endpoint | Method | Auth | Description |
@@ -62,38 +65,66 @@ All commands use the `greg` CLI (via `uv run greg <command>`):
 | `/documents` | GET | JWT | List processed documents |
 | `/documents` | POST | JWT | Upload document (returns job_id) |
 | `/documents/{id}` | DELETE | JWT | Delete a document |
-| `/documents/clear` | POST | Admin | Clear all documents |
+| `/documents` | DELETE | Admin | Clear all documents |
 | `/documents/url` | POST | JWT | Process URL as document |
 
 ### Q&A
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/ask` | POST | JWT | Ask a question (streaming) |
-| `/search` | POST | JWT | Web search query |
+| `/ask` | POST | JWT | Ask a question (streaming SSE) |
+| `/web-search` | POST | JWT | Web search query (streaming SSE) |
 
 ### Jobs (Background Tasks)
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/jobs/{id}` | GET | JWT | Get job status |
-| `/jobs/{id}` | DELETE | JWT | Cancel a job |
+| `/jobs/{id}/cancel` | POST | JWT | Cancel a job |
 | `/jobs` | GET | Admin | List all jobs |
-| `/ws/jobs/{id}` | WS | None | Real-time job progress |
+
+### Costs
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/costs` | GET | JWT | Daily cost summary |
+| `/costs/requests` | GET | JWT | Recent AI requests |
+| `/costs/total` | GET | JWT | Total cost for period |
+
+### API Keys
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api-keys/` | POST | JWT | Create API key |
+| `/api-keys/` | GET | JWT | List your API keys |
+| `/api-keys/{id}` | DELETE | JWT | Revoke API key |
 
 ### Admin
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/admin/users` | GET | Admin | List all users |
-| `/admin/users/{id}` | PATCH | Admin | Update user role/tier |
-| `/admin/invites` | GET/POST | Admin | Manage invite codes |
-| `/api-keys` | GET/POST/DELETE | JWT | Manage API keys |
+| `/admin/users/{id}` | GET | Admin | Get user details |
+| `/admin/users/{id}` | PATCH | Admin | Update user role |
+| `/admin/users/{id}` | DELETE | Admin | Delete user |
+| `/admin/invites` | POST | Admin | Create invite code |
+| `/admin/invites` | GET | Admin | List invites |
+| `/admin/invites/{code}` | DELETE | Admin | Revoke invite |
+
+### Storage
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/storage` | GET | JWT | Vector store statistics |
+| `/storage/cleanup` | POST | Admin | Trigger storage cleanup |
 
 ### System
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
+| `/` | GET | None | API info |
 | `/health` | GET | None | System health check |
-| `/models` | GET | JWT | List available LLM models |
-| `/storage` | GET | JWT | Vector store statistics |
+| `/models` | GET | None | List available LLM models |
 | `/docs` | GET | None | OpenAPI documentation |
+
+### WebSocket
+| Endpoint | Description |
+|----------|-------------|
+| `/ws/jobs/{job_id}` | Subscribe to specific job progress |
+| `/ws` | General WebSocket (subscribe to multiple jobs) |
 
 ## Architecture
 
@@ -104,14 +135,14 @@ All commands use the `greg` CLI (via `uv run greg <command>`):
 ├── src/
 │   ├── api/            # FastAPI routes and dependencies
 │   │   └── routes/     # Route modules (ask, auth, documents, etc.)
-│   ├── auth/           # Authentication (JWT, passwords, API keys)
+│   ├── auth/           # Authentication (JWT, refresh tokens, API keys)
+│   ├── costs/          # Cost tracking and pricing
 │   ├── database/       # SQLAlchemy models and connection
+│   │   └── models/     # One model per file (Rails-style)
 │   ├── jobs/           # Background job processing (ARQ)
-│   ├── llm/            # LLM provider integrations
 │   ├── websocket/      # WebSocket manager and events
-│   ├── config.py       # Environment configuration
-│   ├── security.py     # Input sanitization
-│   └── *.py            # Core modules
+│   ├── config/         # Environment configuration
+│   └── security/       # Input sanitization
 ├── alembic/            # Database migrations
 ├── tests/              # Test suites
 ├── docker-compose.yml  # PostgreSQL + Redis
@@ -120,28 +151,37 @@ All commands use the `greg` CLI (via `uv run greg <command>`):
 └── main.py             # FastAPI application
 ```
 
+### Database Tables
+```
+users              # User accounts (FastAPI-Users base)
+invites            # Registration invite codes
+api_keys           # API key authentication
+refresh_tokens     # Database-backed session management
+ai_requests        # LLM request logging + cost tracking
+documents          # Document metadata (S3 storage reference)
+document_chunks    # Text chunks + pgvector embeddings
+```
+
 ### Key Modules
-- `src/config.py`: Environment configuration
-- `src/database/models.py`: User, Invite, APIKey, RefreshToken models
-- `src/auth/`: JWT tokens, password hashing, dependencies
-- `src/jobs/`: ARQ worker, job manager, document processing
-- `src/websocket/manager.py`: WebSocket connection management
-- `src/unified_document_processor.py`: Document chunking and indexing
-- `src/qa_chain_unified.py`: RAG query processing with streaming
+- `src/database/models/` - One model per file (user.py, invite.py, etc.)
+- `src/auth/users.py` - FastAPI-Users configuration
+- `src/auth/refresh_tokens.py` - Refresh token service
+- `src/auth/dependencies.py` - Auth dependencies (CurrentUser, AdminUser)
+- `src/costs/tracker.py` - Cost tracking with on-the-fly aggregation
+- `src/jobs/` - ARQ worker and job manager
+- `src/websocket/manager.py` - WebSocket connection management
 
 ### Authentication Flow
-1. First user to register becomes admin automatically
+1. First user to register becomes admin automatically (no invite needed)
 2. Admin creates invite codes for new users
 3. Users register with invite code
 4. Login returns access token (15min) + refresh token (7 days)
-5. Access token in `Authorization: Bearer <token>` header
-6. Or use API key in `X-API-Key` header
+5. Refresh tokens rotate on each use (old token invalidated)
+6. Max 10 concurrent sessions per user
 
-### User Tiers
-- **Free**: Local models only (Ollama)
-- **Pro**: Access to paid APIs (OpenAI, Anthropic, Google)
-
-Admin can upgrade users via `/admin/users/{id}` endpoint.
+### Auth Options
+- **JWT**: `Authorization: Bearer <access_token>` header
+- **API Key**: `X-API-Key: <key>` header (for server-to-server)
 
 ### Job Processing
 Document uploads are processed asynchronously:
@@ -180,14 +220,19 @@ DATABASE_URL=postgresql://greg:greg@localhost:5432/greg
 # Redis
 REDIS_URL=redis://localhost:6379
 
-# JWT (CHANGE IN PRODUCTION!)
-JWT_SECRET_KEY=your-secret-key
+# JWT
+JWT_SECRET_KEY=your-secret-key-change-in-production
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+
+# Refresh Tokens
+REFRESH_TOKEN_EXPIRE_DAYS=7
+MAX_SESSIONS_PER_USER=10
 
 # LLM Provider
 LLM_PROVIDER=ollama
 LLM_MODEL=mistral
 
-# Paid API Keys (Pro tier only)
+# Paid API Keys (optional)
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 GOOGLE_API_KEY=
@@ -208,27 +253,32 @@ uv run alembic revision --autogenerate -m "description"
 uv run alembic downgrade -1
 ```
 
+### Current Migrations
+1. `001_create_users_table` - Users with FastAPI-Users fields
+2. `002_create_invites_table` - Invite codes
+3. `003_create_api_keys_table` - API key authentication
+4. `004_create_ai_requests_table` - LLM request logging
+5. `005_create_documents_table` - Document metadata
+6. `006_create_document_chunks_table` - Chunks with pgvector
+7. `007_create_refresh_tokens_table` - Session management
+
 ## Common Tasks
 
 ### Add a New Route
 1. Create route file in `src/api/routes/`
-2. Add router to `src/api/__init__.py`
-3. Add auth dependencies as needed (`CurrentUser`, `AdminUser`, `ProUser`)
+2. Add router to `src/api/app.py`
+3. Add auth dependencies as needed (`CurrentUser`, `AdminUser`)
 
 ### Add a Background Job
 1. Create job function in `src/jobs/document_worker.py`
 2. Add to `WorkerSettings.functions` in `src/jobs/worker.py`
-3. Enqueue with `enqueue_job("function_name", *args, **kwargs)`
+3. Enqueue with `job_manager.create_job()`
 
-### Test Paid Models
-Requires Pro tier. Set API keys in `.env`, then:
-```json
-POST /ask
-{
-  "question": "Hello",
-  "model_name": "gpt-4o-mini"
-}
-```
+### Add a New Model
+1. Create model file in `src/database/models/`
+2. Export from `src/database/models/__init__.py`
+3. Export from `src/database/__init__.py`
+4. Create migration with `uv run alembic revision --autogenerate -m "add X table"`
 
 ## Best Practices
 
@@ -237,3 +287,4 @@ POST /ask
 3. **Async**: All database and I/O operations should be async
 4. **Validation**: Use Pydantic models for request/response schemas
 5. **Errors**: Return proper HTTP status codes with detail messages
+6. **Models**: One model per file in `src/database/models/`

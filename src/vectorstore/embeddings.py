@@ -13,7 +13,7 @@ class MemorySafeEmbeddings(Embeddings):
     def __init__(self, base_embeddings: HuggingFaceEmbeddings, batch_size: int = 2):
         self.base_embeddings = base_embeddings
         self.batch_size = batch_size
-        # Copy essential attributes that FAISS might look for
+        # Copy essential attributes
         self.client = getattr(base_embeddings, 'client', None)
         self.model_name = getattr(base_embeddings, 'model_name', 'all-MiniLM-L6-v2')
     

@@ -29,17 +29,6 @@ class URLProcessRequest(BaseModel):
     temperature: float = 0.7
 
 
-class ModelInfo(BaseModel):
-    """Information about an available LLM model."""
-    model_config = {"protected_namespaces": ()}
-
-    name: str
-    provider: str  # "ollama", "openai", "anthropic", "google"
-    size: Optional[str] = None
-    modified: Optional[str] = None
-    available: bool = True
-
-
 class UploadResponse(BaseModel):
     """Response after uploading a document."""
     model_config = {"protected_namespaces": ()}
