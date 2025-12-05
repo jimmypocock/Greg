@@ -19,6 +19,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import AdminUser, generate_invite_code
@@ -219,30 +220,34 @@ async def create_invite(
     session: AsyncSession = Depends(get_session_dependency),
 ):
     """Create a new invite code."""
-    # Generate unique code
-    code = generate_invite_code()
-
-    # Ensure uniqueness
-    while True:
-        result = await session.execute(select(Invite).where(Invite.code == code))
-        if not result.scalar_one_or_none():
-            break
-        code = generate_invite_code()
-
-    # Calculate expiration
     expires_at = None
     if request.expires_in_days:
         expires_at = datetime.now(timezone.utc) + timedelta(days=request.expires_in_days)
 
-    # Create invite
-    invite = Invite(
-        code=code,
-        email=request.email.lower() if request.email else None,
-        created_by=admin.id,
-        expires_at=expires_at,
-    )
-    session.add(invite)
-    await session.commit()
+    # Retry on collision (extremely rare)
+    max_retries = 3
+    for attempt in range(max_retries):
+        code = generate_invite_code()
+        invite = Invite(
+            code=code,
+            email=request.email.lower() if request.email else None,
+            created_by=admin.id,
+            expires_at=expires_at,
+        )
+        session.add(invite)
+
+        try:
+            await session.commit()
+            break
+        except IntegrityError:
+            await session.rollback()
+            if attempt == max_retries - 1:
+                logger.error("Failed to generate unique invite code after retries")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to generate unique invite code",
+                )
+            logger.warning(f"Invite code collision, retrying ({attempt + 1}/{max_retries})")
 
     logger.info(f"Admin {admin.email} created invite {code}")
 

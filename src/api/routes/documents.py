@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas import URLProcessRequest, JobCreatedResponse
 from src.api.dependencies import get_config, get_db
 from src.api.rate_limit import limiter
-from src.auth import CurrentUser, AdminUser
+from src.auth import Auth, CurrentUser, AdminUser
 from src.config.settings import Config
 from src.database.models import Document, DocumentStatus, DocumentChunk
 from src.security.sanitization import sanitize_filename, create_safe_file_path, is_safe_url
@@ -38,7 +38,7 @@ router = APIRouter()
 @limiter.limit("10/minute")
 async def upload_document(
     request: Request,
-    user: CurrentUser,
+    auth: Auth,
     db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
     chunk_size: int = Form(800),
@@ -84,7 +84,8 @@ async def upload_document(
         # Create document record in database
         document = Document(
             id=uuid.uuid4(),
-            user_id=user.id,
+            user_id=auth.user.id,
+            api_key_id=auth.api_key_id,
             name=safe_filename,
             file_type=file_ext.lstrip("."),
             file_size=file_size,
@@ -135,7 +136,7 @@ async def upload_document(
 @limiter.limit("10/minute")
 async def process_url(
     request: Request,
-    user: CurrentUser,
+    auth: Auth,
     url_request: URLProcessRequest,
     db: AsyncSession = Depends(get_db),
     config: Config = Depends(get_config),
@@ -162,7 +163,8 @@ async def process_url(
 
         document = Document(
             id=uuid.uuid4(),
-            user_id=user.id,
+            user_id=auth.user.id,
+            api_key_id=auth.api_key_id,
             name=url_filename,
             file_type="url",
             file_size=0,  # Will be updated after fetch

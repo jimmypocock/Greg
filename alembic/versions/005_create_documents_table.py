@@ -39,8 +39,9 @@ def upgrade() -> None:
         # Primary key
         sa.Column("id", sa.UUID(), nullable=False),
 
-        # Ownership
+        # Ownership & Attribution
         sa.Column("user_id", sa.UUID(), nullable=False),
+        sa.Column("api_key_id", sa.UUID(), nullable=True),
 
         # File info
         sa.Column("name", sa.String(length=255), nullable=False),
@@ -71,10 +72,12 @@ def upgrade() -> None:
         # Constraints
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["api_key_id"], ["api_keys.id"], ondelete="SET NULL"),
     )
 
     # Create indices
     op.create_index(f"ix_{TABLE_NAME}_user_id", TABLE_NAME, ["user_id"])
+    op.create_index(f"ix_{TABLE_NAME}_api_key_id", TABLE_NAME, ["api_key_id"])
     op.create_index(f"ix_{TABLE_NAME}_status", TABLE_NAME, ["status"])
     op.create_index(f"ix_{TABLE_NAME}_file_type", TABLE_NAME, ["file_type"])
     op.create_index(f"ix_{TABLE_NAME}_created_at", TABLE_NAME, ["created_at"])
@@ -95,6 +98,7 @@ def downgrade() -> None:
     op.drop_index(f"ix_{TABLE_NAME}_created_at", table_name=TABLE_NAME)
     op.drop_index(f"ix_{TABLE_NAME}_file_type", table_name=TABLE_NAME)
     op.drop_index(f"ix_{TABLE_NAME}_status", table_name=TABLE_NAME)
+    op.drop_index(f"ix_{TABLE_NAME}_api_key_id", table_name=TABLE_NAME)
     op.drop_index(f"ix_{TABLE_NAME}_user_id", table_name=TABLE_NAME)
 
     op.drop_table(TABLE_NAME)

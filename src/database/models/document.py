@@ -13,6 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from src.database.models.api_key import APIKey
     from src.database.models.document_chunk import DocumentChunk
     from src.database.models.user import User
 
@@ -38,8 +39,14 @@ class Document(Base, TimestampMixin):
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+    api_key_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("api_keys.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
 
@@ -92,6 +99,7 @@ class Document(Base, TimestampMixin):
     )
 
     # Relationships
+    api_key: Mapped["APIKey | None"] = relationship("APIKey")
     user: Mapped["User"] = relationship("User")
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         "DocumentChunk",
