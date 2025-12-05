@@ -28,17 +28,21 @@ async def root():
         "status": "running",
         "supported_files": ["pdf", "txt", "csv", "md", "docx", "xlsx", "png", "jpg"],
         "endpoints": {
+            # System
             "health": "GET /health - System health and memory stats",
             "models": "GET /models - List available LLM models",
-            "documents": "GET /documents - List processed documents",
-            "upload": "POST /upload - Upload and process a document",
-            "ask": "POST /ask - Ask a question (streaming)",
-            "ask_streaming": "POST /ask-streaming - Explicit streaming endpoint",
-            "web_search": "POST /web-search - Search the web",
-            "process_url": "POST /process-url - Process a URL as a document",
-            "delete_document": "DELETE /documents/{id} - Delete a document",
-            "clear_all": "POST /clear-all - Clear all documents",
-            "storage_stats": "GET /storage-stats - Vector store statistics",
+            # Documents
+            "upload": "POST /documents - Upload and process a document",
+            "upload_url": "POST /documents/url - Process a URL as a document",
+            "list": "GET /documents - List processed documents",
+            "delete": "DELETE /documents/{id} - Delete a document",
+            "clear": "DELETE /documents - Clear all documents",
+            # Q&A
+            "ask": "POST /ask - Ask a question about documents",
+            "search": "POST /web-search - Search the web",
+            # Storage
+            "storage": "GET /storage - Vector store statistics",
+            "cleanup": "POST /storage/cleanup - Trigger storage cleanup",
         },
         "docs": "/docs",
     }

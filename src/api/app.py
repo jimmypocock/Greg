@@ -14,7 +14,19 @@ from slowapi.errors import RateLimitExceeded
 
 from src.api.lifespan import lifespan
 from src.api.rate_limit import limiter
-from src.api.routes import health, documents, qa, storage
+from src.api.routes import (
+    admin,
+    api_keys,
+    ask,
+    auth,
+    costs,
+    documents,
+    health,
+    jobs,
+    search,
+    storage,
+    websocket,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,16 +95,37 @@ def _configure_rate_limiting(app: FastAPI) -> None:
 
 def _register_routes(app: FastAPI) -> None:
     """Register all route modules."""
-    # Health and info routes (no prefix)
+    # Health and info routes (no prefix, public)
     app.include_router(health.router, tags=["Health"])
 
-    # Document routes
+    # Authentication routes (public)
+    app.include_router(auth.router)
+
+    # Document routes (authenticated)
     app.include_router(documents.router, tags=["Documents"])
 
-    # Q&A routes
-    app.include_router(qa.router, tags=["Q&A"])
+    # Ask routes (document Q&A, authenticated)
+    app.include_router(ask.router, tags=["Ask"])
 
-    # Storage routes
+    # Search routes (web search, authenticated)
+    app.include_router(search.router, tags=["Search"])
+
+    # Storage routes (authenticated)
     app.include_router(storage.router, tags=["Storage"])
+
+    # Job routes (authenticated)
+    app.include_router(jobs.router, tags=["Jobs"])
+
+    # API key management (authenticated)
+    app.include_router(api_keys.router)
+
+    # Cost tracking routes (authenticated)
+    app.include_router(costs.router, tags=["Costs"])
+
+    # Admin routes (admin only)
+    app.include_router(admin.router)
+
+    # WebSocket routes
+    app.include_router(websocket.router, tags=["WebSocket"])
 
 

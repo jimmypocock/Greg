@@ -49,7 +49,6 @@ tmp/
 tests/screenshots/
 tests/results/
 .streamlit/
-*.json
 !package.json
 !src/model_config.json
 !tests/test_config.json

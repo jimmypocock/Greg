@@ -2,13 +2,14 @@
 Document management routes.
 
 Endpoints:
-    POST /upload              - Upload and process a document
-    POST /process-url         - Process a URL as a document
-    GET /documents            - List all documents
+    POST   /documents         - Upload and process a document (async with job)
+    POST   /documents/url     - Process a URL as a document (async with job)
+    GET    /documents         - List all documents
     DELETE /documents/{id}    - Delete a document
-    POST /clear-all           - Clear all documents
+    DELETE /documents         - Clear all documents
 """
 
+import asyncio
 import os
 import json
 import shutil
@@ -18,13 +19,16 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File, Form
 
-from src.api.schemas import UploadResponse, URLProcessRequest, MessageResponse
+from src.api.schemas import UploadResponse, URLProcessRequest, MessageResponse, JobCreatedResponse
 from src.api.dependencies import get_config, get_doc_processor
 from src.api.rate_limit import limiter
+from src.auth import CurrentUser, AdminUser
 from src.config.settings import Config
+from src.database import User
 from src.documents.processor import DocumentProcessor
 from src.config.errors import ErrorMessages
 from src.security.sanitization import sanitize_filename, create_safe_file_path, is_safe_url
+from src.jobs import job_manager, JobType, process_document_async, process_url_async
 from src.utils.async_io import (
     write_file_async,
     delete_file_async,
@@ -40,25 +44,41 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/upload", response_model=UploadResponse)
+@router.post("/documents", response_model=JobCreatedResponse, status_code=202)
 @limiter.limit("10/minute")
 async def upload_document(
     request: Request,
+    user: CurrentUser,
     file: UploadFile = File(...),
     chunk_size: int = Form(800),
     config: Config = Depends(get_config),
     doc_processor: DocumentProcessor = Depends(get_doc_processor),
 ):
     """
-    Upload and process a document at runtime.
+    Upload and process a document asynchronously.
+
+    Returns immediately with a job_id. Connect to the WebSocket endpoint
+    to receive real-time progress updates.
 
     Supports: PDF, TXT, CSV, MD, DOCX, XLSX, PNG, JPG
-    The document will be added to the unified vector store.
 
     Example with curl:
-        curl -X POST "http://localhost:8080/upload" \\
+        curl -X POST "http://localhost:8080/documents" \\
             -F "file=@document.pdf" \\
             -F "chunk_size=800"
+
+    Response:
+        {
+            "job_id": "uuid",
+            "status": "pending",
+            "message": "Processing started",
+            "websocket_url": "ws://localhost:8080/ws/jobs/{job_id}"
+        }
+
+    WebSocket progress events:
+        {"type": "job.progress", "job_id": "...", "data": {"stage": "...", "percent": 50}}
+        {"type": "job.completed", "job_id": "...", "data": {"result": {...}}}
+        {"type": "job.failed", "job_id": "...", "data": {"error": "..."}}
     """
     # Sanitize filename
     safe_filename = sanitize_filename(file.filename)
@@ -82,44 +102,69 @@ async def upload_document(
         raise HTTPException(status_code=500, detail="Could not create upload path")
 
     try:
-        # Read and write file
+        # Read and write file immediately
         content = await file.read()
         await write_file_async(safe_path, content, mode="wb")
 
-        # Process the document
-        doc_id, pages, chunks, processing_time = doc_processor.process_file(
-            str(safe_path), safe_filename, chunk_size=chunk_size
+        # Create a job for tracking
+        job = await job_manager.create_job(JobType.DOCUMENT_UPLOAD)
+
+        # Start background processing
+        asyncio.create_task(
+            process_document_async(
+                job_id=job.job_id,
+                file_path=safe_path,
+                filename=safe_filename,
+                chunk_size=chunk_size,
+                doc_processor=doc_processor,
+            )
         )
 
-        logger.info(f"Uploaded and processed: {safe_filename} -> {doc_id}")
+        logger.info(f"Started upload job {job.job_id} for {safe_filename}")
 
-        return UploadResponse(
-            document_id=doc_id,
-            pages=pages,
-            chunks=chunks,
-            processing_time=processing_time,
-            message=f"Successfully processed {safe_filename}",
+        # Build WebSocket URL from request
+        ws_scheme = "wss" if request.url.scheme == "https" else "ws"
+        ws_url = f"{ws_scheme}://{request.url.netloc}/ws/jobs/{job.job_id}"
+
+        return JobCreatedResponse(
+            job_id=job.job_id,
+            status="pending",
+            message=f"Processing started for {safe_filename}",
+            websocket_url=ws_url,
         )
 
     except Exception as e:
         # Clean up on error
         if safe_path and safe_path.exists():
             safe_path.unlink()
-        logger.error(f"Error uploading document: {e}")
+        logger.error(f"Error starting upload job: {e}")
         error_msg = ErrorMessages.get_specific_error(e, {"context": "upload"})
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-@router.post("/process-url", response_model=UploadResponse)
+@router.post("/documents/url", response_model=JobCreatedResponse, status_code=202)
 @limiter.limit("10/minute")
 async def process_url(
     request: Request,
+    user: CurrentUser,
     url_request: URLProcessRequest,
     config: Config = Depends(get_config),
     doc_processor: DocumentProcessor = Depends(get_doc_processor),
 ):
-    """Process a URL by fetching and converting its content to a document."""
+    """
+    Process a URL asynchronously by fetching and converting its content.
 
+    Returns immediately with a job_id. Connect to the WebSocket endpoint
+    to receive real-time progress updates.
+
+    Response:
+        {
+            "job_id": "uuid",
+            "status": "pending",
+            "message": "Processing started",
+            "websocket_url": "ws://localhost:8080/ws/jobs/{job_id}"
+        }
+    """
     # Validate URL
     if not is_safe_url(url_request.url):
         raise HTTPException(
@@ -128,69 +173,43 @@ async def process_url(
         )
 
     try:
-        logger.info(f"Processing URL: {url_request.url}")
+        # Create a job for tracking
+        job = await job_manager.create_job(JobType.URL_PROCESS)
 
-        # Fetch and process URL content
-        from src.rag.web_search import WebSearcher
-
-        searcher = WebSearcher()
-
-        # Extract content from URL
-        content = searcher.extract_content(url_request.url)
-        if not content:
-            raise HTTPException(status_code=400, detail="Could not extract content from URL")
-
-        # Parse title from content or URL
-        from urllib.parse import urlparse
-
-        parsed_url = urlparse(url_request.url)
-        title = f"Web: {parsed_url.netloc}"
-
-        # Create a temporary file from the content with secure name
-        safe_filename = f"web_{uuid.uuid4().hex[:8]}.txt"
-        safe_path = create_safe_file_path(safe_filename, config.UPLOAD_DIR)
-
-        if not safe_path:
-            raise HTTPException(status_code=500, detail="Could not create temporary file")
-
-        try:
-            # Write web content asynchronously
-            web_content = f"# {title}\n\nSource: {url_request.url}\n\n{content}"
-            await write_file_async(safe_path, web_content)
-
-            # Process as a text document
-            doc_id, pages, chunks, processing_time = doc_processor.process_file(
-                str(safe_path),
-                safe_filename,
+        # Start background processing
+        asyncio.create_task(
+            process_url_async(
+                job_id=job.job_id,
+                url=url_request.url,
                 chunk_size=url_request.chunk_size,
+                config=config,
+                doc_processor=doc_processor,
             )
+        )
 
-            # Clean up asynchronously
-            await delete_file_async(safe_path)
+        logger.info(f"Started URL processing job {job.job_id} for {url_request.url}")
 
-            return UploadResponse(
-                document_id=doc_id,
-                pages=1,  # Web content is treated as single page
-                chunks=chunks,
-                processing_time=processing_time,
-                message=f"Successfully processed web content from {parsed_url.netloc}",
-            )
+        # Build WebSocket URL from request
+        ws_scheme = "wss" if request.url.scheme == "https" else "ws"
+        ws_url = f"{ws_scheme}://{request.url.netloc}/ws/jobs/{job.job_id}"
 
-        except Exception as e:
-            if safe_path and safe_path.exists():
-                safe_path.unlink()
-            raise e
+        return JobCreatedResponse(
+            job_id=job.job_id,
+            status="pending",
+            message=f"Processing started for {url_request.url}",
+            websocket_url=ws_url,
+        )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error processing URL: {e}")
+        logger.error(f"Error starting URL processing job: {e}")
         error_msg = ErrorMessages.get_specific_error(e, {"context": "url_processing"})
         raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/documents")
-async def list_documents(config: Config = Depends(get_config)):
+async def list_documents(user: CurrentUser, config: Config = Depends(get_config)):
     """List all processed documents."""
     try:
         return await _list_documents_impl(config)
@@ -267,7 +286,7 @@ async def _list_documents_impl(config: Config):
 
 
 @router.delete("/documents/{document_id}")
-async def delete_document(document_id: str, config: Config = Depends(get_config)):
+async def delete_document(document_id: str, user: CurrentUser, config: Config = Depends(get_config)):
     """Delete a specific document."""
     try:
         deleted_something = False
@@ -302,9 +321,9 @@ async def delete_document(document_id: str, config: Config = Depends(get_config)
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-@router.post("/clear-all")
-async def clear_all_documents(config: Config = Depends(get_config)):
-    """Clear all documents and reset the system."""
+@router.delete("/documents")
+async def clear_all_documents(admin: AdminUser, config: Config = Depends(get_config)):
+    """Clear all documents and reset the system. Admin only."""
     try:
         # Clear all files in vector store directory
         for file in config.VECTOR_STORE_DIR.glob("*"):

@@ -11,6 +11,7 @@ from src.api.dependencies import (
     get_vector_store_manager,
     cleanup_resources,
 )
+from src.database import init_database, close_database
 from src.llm.warmup import start_background_warmup
 
 logger = logging.getLogger(__name__)
@@ -22,18 +23,24 @@ async def lifespan(app: FastAPI):
     Manage application lifecycle.
 
     Startup:
+        - Initialize database connection
         - Initialize configuration
         - Set up vector store manager
         - Start background model warmup
         - Run initial cleanup
 
     Shutdown:
+        - Close database connection
         - Clean up all resources
     """
     # Startup
     logger.info("Initializing Greg API...")
 
     try:
+        # Initialize database
+        logger.info("Connecting to database...")
+        await init_database()
+
         # Initialize config (creates directories)
         config = get_config()
 
@@ -64,5 +71,6 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Greg API...")
+    await close_database()
     cleanup_resources()
     logger.info("Shutdown complete")

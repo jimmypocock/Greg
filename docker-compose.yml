@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: greg-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-greg}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-greg}
+      POSTGRES_DB: ${DB_NAME:-greg}
+    ports:
+      - "5433:5432"
+    volumes:
+      - greg-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-greg}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: greg-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - greg-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  greg-postgres-data:
+  greg-redis-data:

@@ -4,328 +4,236 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Greg is a local AI playground featuring a Retrieval-Augmented Generation (RAG) system with a RESTful API:
+Greg is a production-ready RAG (Retrieval-Augmented Generation) system with:
 
-1. **Ollama Service** (port 11434): Runs local LLMs (Mistral, Llama, Phi, Deepseek)
-2. **FastAPI Backend** (port 8080): Handles document processing, vector storage, and Q&A logic
-3. **CLI Interface**: Command-line interface for interactive chat and document management
-4. **Document Preprocessing**: Automatic processing of documents in `/documents` folder at startup
+1. **FastAPI Backend** (port 8080): Document processing, vector storage, Q&A, authentication
+2. **PostgreSQL**: User accounts, invites, API keys, sessions
+3. **Redis + ARQ**: Background job queue for document processing
+4. **Ollama** (port 11434): Local LLM inference (Mistral, Llama, Phi, Deepseek)
+5. **WebSocket**: Real-time progress updates for long-running jobs
 
-## Critical: How to Work with This Project
+## Quick Start
 
-### 1. ALWAYS Use Make Commands
-This project uses a Makefile for ALL operations. Never run Python commands directly.
-
-### 2. Virtual Environment
-The virtual environment is managed automatically by the Makefile and scripts. You do NOT need to:
-- Manually activate venv
-- Run pip install
-
-Everything is handled by `make install` and the startup scripts.
-
-### 3. Document Management
-Documents can be managed two ways:
-- **Filesystem**: Place documents in the `/documents` folder and run `make run`
-- **API Upload**: Use `POST /upload` or `python cli.py upload <file>` at runtime
-
-### 4. Starting the Application
 ```bash
-# Start API with document preprocessing (recommended):
-make run
+# Copy environment file
+cp .env.example .env
 
-# This automatically:
-# - Checks/installs dependencies
-# - Starts Ollama
-# - Starts API server
-# - Clears vector stores
-# - Processes all documents in /documents folder
+# Start everything (Docker + migrations + API)
+uv run greg dev
 
-# Start API server only (no preprocessing):
-make api
-
-# Start interactive CLI (requires API running):
-make cli
+# Or run services individually:
+uv run greg infra      # Start PostgreSQL + Redis
+uv run greg migrate    # Run database migrations
+uv run greg server     # Start API server
+uv run greg worker     # Start background job worker
 ```
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | System health and memory stats |
-| `/models` | GET | List available LLM models |
-| `/documents` | GET | List processed documents |
-| `/upload` | POST | Upload and process a document |
-| `/ask` | POST | Ask a question (streaming) |
-| `/ask-streaming` | POST | Explicit streaming endpoint |
-| `/web-search` | POST | Search the web |
-| `/process-url` | POST | Process a URL as a document |
-| `/documents/{id}` | DELETE | Delete a document |
-| `/clear-all` | POST | Clear all documents |
-| `/storage-stats` | GET | Vector store statistics |
-| `/docs` | GET | OpenAPI documentation |
 
 ## CLI Commands
 
-```bash
-# Interactive chat mode (default)
-python cli.py
+All commands use the `greg` CLI (via `uv run greg <command>`):
 
-# Ask a question
-python cli.py ask "What is this document about?"
+| Command | Description |
+|---------|-------------|
+| `dev` | Start infra, run migrations, start API server |
+| `server` | Start API server only |
+| `worker` | Start ARQ background worker |
+| `infra` | Start PostgreSQL + Redis (docker-compose) |
+| `infra-stop` | Stop infrastructure containers |
+| `migrate` | Run database migrations |
+| `test` | Run tests (`greg test -k "pattern"` for specific) |
+| `models` | List available LLM models |
+| `clean` | Clean temporary files |
+| `help` | Show all commands |
 
-# Ask with web search
-python cli.py ask "What is the weather?" --web
+## API Endpoints
 
-# Web search only
-python cli.py search "latest AI news"
+### Authentication
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/auth/signup` | POST | None | Register (invite code required) |
+| `/auth/login` | POST | None | Login, get JWT tokens |
+| `/auth/refresh` | POST | Refresh Token | Refresh access token |
+| `/auth/logout` | POST | JWT | Logout, revoke tokens |
+| `/auth/me` | GET | JWT | Get current user profile |
 
-# Upload a document
-python cli.py upload document.pdf
+### Documents
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/documents` | GET | JWT | List processed documents |
+| `/documents` | POST | JWT | Upload document (returns job_id) |
+| `/documents/{id}` | DELETE | JWT | Delete a document |
+| `/documents/clear` | POST | Admin | Clear all documents |
+| `/documents/url` | POST | JWT | Process URL as document |
 
-# List documents
-python cli.py docs
+### Q&A
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/ask` | POST | JWT | Ask a question (streaming) |
+| `/search` | POST | JWT | Web search query |
 
-# List models
-python cli.py models
+### Jobs (Background Tasks)
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/jobs/{id}` | GET | JWT | Get job status |
+| `/jobs/{id}` | DELETE | JWT | Cancel a job |
+| `/jobs` | GET | Admin | List all jobs |
+| `/ws/jobs/{id}` | WS | None | Real-time job progress |
 
-# Check API health
-python cli.py health
+### Admin
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/admin/users` | GET | Admin | List all users |
+| `/admin/users/{id}` | PATCH | Admin | Update user role/tier |
+| `/admin/invites` | GET/POST | Admin | Manage invite codes |
+| `/api-keys` | GET/POST/DELETE | JWT | Manage API keys |
 
-# Interactive chat commands:
-#   /web      - Toggle web search mode
-#   /upload   - Upload a document
-#   /model    - Switch model
-#   /models   - List models
-#   /docs     - List documents
-#   /help     - Show help
-#   exit      - Quit
-```
+### System
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/health` | GET | None | System health check |
+| `/models` | GET | JWT | List available LLM models |
+| `/storage` | GET | JWT | Vector store statistics |
+| `/docs` | GET | None | OpenAPI documentation |
 
-## Testing the Application
-
-### Testing Strategy
-Greg uses a streamlined testing approach:
-
-1. **Unit Tests** - Fast tests including security validations
-2. **API Tests** - Comprehensive backend coverage
-3. **Integration Tests** - Service interaction tests
-4. **Performance Tests** - Optimization and caching tests
-
-### Quick Test Commands
-```bash
-# Run all tests (recommended)
-make test
-
-# Quick tests for development
-make test-quick        # Unit tests only
-
-# Individual test suites
-make test-unit         # Unit tests (includes security)
-make test-api          # API endpoint tests
-make test-integration  # Integration tests
-make test-performance  # Performance tests
-
-# Model testing
-make test-models       # Test specific models
-make test-models-quick # Quick compatibility test
-```
-
-### Test Infrastructure
-- **Test Runner**: Simplified test runner in `tests/run_tests.py`
-- **Fixtures**: Test files in `tests/fixtures/`
-- **Security Tests**: Included in unit tests
-
-### Common Test Issues & Solutions
-
-1. **Port Conflicts**:
-   - Tests check if services are already running before starting new instances
-   - No need to stop `make run` before testing
-
-2. **Import Errors**:
-   - All imports should use `from src.module` format
-   - Never use relative imports in tests
-
-3. **Model Tests**:
-   - Require models to be downloaded first
-   - Use `make test-models MODELS='mistral'` to test specific models
-
-## Important Make Commands
-
-### Development
-- `make run` - Start API with document preprocessing
-- `make api` - Start API server only
-- `make cli` - Start interactive CLI
-- `make clean` - Clean temporary files
-- `make monitor` - Monitor resources
-- `make models` - List available models
-
-### Testing
-- `make test` - Run all tests
-- `make test-quick` - Quick unit tests
-- `make test-unit` - Unit tests
-- `make test-api` - API endpoint tests
-- `make test-integration` - Integration tests
-- `make test-performance` - Performance tests
-- `make test-models MODELS='mistral,llama3'` - Test specific models
-
-## Architecture Details
-
-### Data Flow
-1. Documents placed in `/documents` folder OR uploaded via API
-2. On startup: preprocessing script -> unified document processor -> chunks -> embeddings -> FAISS vector store
-3. User queries -> Query classification (6 intent types) -> UnifiedQAChain routes query -> FAISS similarity search -> context retrieval -> Ollama LLM -> streaming response
-4. Web search queries -> Direct to LLM with web context
-5. All documents stored in single vector store with source metadata
-
-### Query Classification System
-The app uses intelligent pattern-based classification to route queries:
-- **DOCUMENT_QUESTION**: Default for document queries
-- **ANALYSIS_REQUEST**: Compare, summarize, analyze
-- **DATA_EXTRACTION**: Extract specific data
-- **COMPUTATION**: Math and calculations
-- **CASUAL_CHAT**: Greetings (skips document loading)
-- **WEB_SEARCH**: Current events (searches web)
+## Architecture
 
 ### File Structure
 ```
 /
-├── documents/            # Place your documents here (gitignored)
-│   └── README.md        # Instructions for users
-├── scripts/              # Utility scripts
-│   └── preprocess_documents.py  # Document preprocessing
-├── src/                  # Core application code
-│   ├── performance/     # Performance monitoring
-│   ├── streaming/       # Streaming response handling
+├── documents/           # User documents (gitignored)
+├── src/
+│   ├── api/            # FastAPI routes and dependencies
+│   │   └── routes/     # Route modules (ask, auth, documents, etc.)
+│   ├── auth/           # Authentication (JWT, passwords, API keys)
+│   ├── database/       # SQLAlchemy models and connection
+│   ├── jobs/           # Background job processing (ARQ)
+│   ├── llm/            # LLM provider integrations
+│   ├── websocket/      # WebSocket manager and events
+│   ├── config.py       # Environment configuration
+│   ├── security.py     # Input sanitization
 │   └── *.py            # Core modules
-├── tests/
-│   ├── unit/           # Unit tests
-│   ├── integration/    # Integration tests
-│   ├── api/            # API tests
-│   ├── performance/    # Performance tests
-│   ├── results/        # Test output files (gitignored)
-│   └── fixtures/       # Test data
-├── vector_stores/      # FAISS indexes (cleared on startup)
-├── uploads/            # Temporary file storage
-├── cli.py             # CLI interface
-├── main.py            # FastAPI backend
-├── run.sh             # Startup script
-└── Makefile           # All commands
+├── alembic/            # Database migrations
+├── tests/              # Test suites
+├── docker-compose.yml  # PostgreSQL + Redis
+├── pyproject.toml      # Dependencies and config
+├── run.py              # CLI runner
+└── main.py             # FastAPI application
 ```
 
 ### Key Modules
-- `src/config.py`: Environment configuration and memory optimization
-- `src/unified_document_processor.py`: Multi-document processing into single vector store
-- `src/qa_chain_unified.py`: Unified QA chain with intelligent routing and streaming
-- `src/memory_safe_embeddings.py`: Memory-efficient embeddings with caching
-- `src/web_search.py`: Web search functionality
-- `src/security.py`: Input sanitization and validation
+- `src/config.py`: Environment configuration
+- `src/database/models.py`: User, Invite, APIKey, RefreshToken models
+- `src/auth/`: JWT tokens, password hashing, dependencies
+- `src/jobs/`: ARQ worker, job manager, document processing
+- `src/websocket/manager.py`: WebSocket connection management
+- `src/unified_document_processor.py`: Document chunking and indexing
+- `src/qa_chain_unified.py`: RAG query processing with streaming
 
-### Vector Store Persistence
-- Single unified store saved in `vector_stores/unified_store.faiss`
-- Metadata in `unified_store_metadata.json`
-- All documents indexed in one store with source attribution
-- Cleared and rebuilt on each startup for consistency
+### Authentication Flow
+1. First user to register becomes admin automatically
+2. Admin creates invite codes for new users
+3. Users register with invite code
+4. Login returns access token (15min) + refresh token (7 days)
+5. Access token in `Authorization: Bearer <token>` header
+6. Or use API key in `X-API-Key` header
 
-### Error Handling Best Practices
-- Connection errors show helpful messages
-- Processing timeouts: 300s for large files
-- Memory monitoring prevents OOM
-- All errors logged with context
+### User Tiers
+- **Free**: Local models only (Ollama)
+- **Pro**: Access to paid APIs (OpenAI, Anthropic, Google)
 
-## CORS Configuration
+Admin can upgrade users via `/admin/users/{id}` endpoint.
 
-For deployment, configure CORS via environment variables:
+### Job Processing
+Document uploads are processed asynchronously:
+1. Upload returns `job_id` immediately
+2. Connect to `/ws/jobs/{job_id}` for real-time progress
+3. Poll `/jobs/{job_id}` for status if WebSocket unavailable
+
+## Testing
 
 ```bash
-# Allow specific origins (comma-separated)
-export ALLOWED_ORIGINS="https://myapp.com,https://api.myapp.com"
+# Run all tests
+uv run greg test
 
-# Or allow all origins (development only)
-export CORS_ALLOW_ALL=true
+# Run specific tests
+uv run greg test -k "test_auth"
+uv run greg test -k "test_documents"
+uv run greg test tests/api/
+
+# Run with verbose output
+uv run greg test -v
 ```
 
-Default development origins:
-- `http://localhost:3000` (NextJS)
-- `http://localhost:5173` (Vite)
-- `http://localhost:8080` (API docs)
+### Test Structure
+- `tests/unit/` - Fast unit tests
+- `tests/api/` - API endpoint tests
+- `tests/integration/` - Service integration tests
 
-## Model Compatibility
+## Environment Variables
 
-### Known Issues
-- **Deepseek**: Requires minimal parameters (only `num_ctx`)
-- Some models don't support `num_thread`, `repeat_penalty`, or custom `stop` tokens
-- Model config stored in `src/model_config.json`
+Key variables in `.env`:
 
-### Testing Models
 ```bash
-# Test all models
-make test-models
+# Database
+DATABASE_URL=postgresql://greg:greg@localhost:5432/greg
 
-# Test specific models
-make test-models MODELS='deepseek,mistral'
+# Redis
+REDIS_URL=redis://localhost:6379
 
-# Quick format compatibility test
-make test-models-quick
+# JWT (CHANGE IN PRODUCTION!)
+JWT_SECRET_KEY=your-secret-key
+
+# LLM Provider
+LLM_PROVIDER=ollama
+LLM_MODEL=mistral
+
+# Paid API Keys (Pro tier only)
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+GOOGLE_API_KEY=
+```
+
+See `.env.example` for full list.
+
+## Database Migrations
+
+```bash
+# Run pending migrations
+uv run greg migrate
+
+# Create new migration
+uv run alembic revision --autogenerate -m "description"
+
+# Rollback one migration
+uv run alembic downgrade -1
+```
+
+## Common Tasks
+
+### Add a New Route
+1. Create route file in `src/api/routes/`
+2. Add router to `src/api/__init__.py`
+3. Add auth dependencies as needed (`CurrentUser`, `AdminUser`, `ProUser`)
+
+### Add a Background Job
+1. Create job function in `src/jobs/document_worker.py`
+2. Add to `WorkerSettings.functions` in `src/jobs/worker.py`
+3. Enqueue with `enqueue_job("function_name", *args, **kwargs)`
+
+### Test Paid Models
+Requires Pro tier. Set API keys in `.env`, then:
+```json
+POST /ask
+{
+  "question": "Hello",
+  "model_name": "gpt-4o-mini"
+}
 ```
 
 ## Best Practices
 
-### When Making Changes
-1. Run `make run` to start the API
-2. Make changes to code
-3. Test with `make test` or specific test commands
-4. Run `make test` before committing
-
-### Common Pitfalls to Avoid
-- Don't manually manage venv - use make commands
-- Don't skip tests - all must pass
-- Don't use relative imports - use `from src.module`
-- Don't hardcode ports - use config values
-
-### Debugging Tips
-- Check service status with `make monitor`
-- Logs available in terminal output
-- API docs at `http://localhost:8080/docs`
-- Use `--verbose` flag for detailed test output
-
-## Quick Reference
-
-```bash
-# Start API
-make run
-
-# Interactive CLI
-python cli.py
-
-# Ask a question
-python cli.py ask "What is this about?"
-
-# Upload a document
-python cli.py upload myfile.pdf
-
-# Run all tests
-make test
-
-# Check what's running
-make monitor
-```
-
-## Future: Adding LLM Providers
-
-The `/models` endpoint is designed to be extensible. To add new providers:
-
-1. Set environment variables:
-   - `OPENAI_API_KEY` for OpenAI
-   - `ANTHROPIC_API_KEY` for Anthropic
-   - `GOOGLE_API_KEY` for Google/Gemini
-
-2. The `/models` endpoint will automatically list available models from configured providers.
-
-3. Use the `model_name` parameter in `/ask` requests to specify which model to use:
-   ```json
-   {
-     "question": "What is this about?",
-     "document_id": "unified",
-     "model_name": "gpt-4"
-   }
-   ```
+1. **Authentication**: All new routes should require auth unless public
+2. **Imports**: Use `from src.module` format, never relative imports
+3. **Async**: All database and I/O operations should be async
+4. **Validation**: Use Pydantic models for request/response schemas
+5. **Errors**: Return proper HTTP status codes with detail messages

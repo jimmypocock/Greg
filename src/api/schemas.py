@@ -107,3 +107,13 @@ class MessageResponse(BaseModel):
     model_config = {"protected_namespaces": ()}
 
     message: str
+
+
+class JobCreatedResponse(BaseModel):
+    """Response when a background job is created."""
+    model_config = {"protected_namespaces": ()}
+
+    job_id: str
+    status: str = "pending"
+    message: str
+    websocket_url: str
