@@ -23,6 +23,13 @@ class AccessTokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class LoginRequest(BaseModel):
+    """JSON login request."""
+
+    email: EmailStr
+    password: str
+
+
 class MessageResponse(BaseModel):
     """Simple message response."""
 

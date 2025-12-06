@@ -104,7 +104,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
 # Authentication setup
 
-bearer_transport = BearerTransport(tokenUrl="auth/login")
+bearer_transport = BearerTransport(tokenUrl="auth/token")
 
 
 def get_jwt_strategy() -> JWTStrategy:

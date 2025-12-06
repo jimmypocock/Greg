@@ -5,7 +5,7 @@ Provides JWT authentication with database-backed refresh tokens.
 
 Endpoints:
     POST   /auth/register        - Register with invite code
-    POST   /auth/login           - Login and get access + refresh tokens
+    POST   /auth/token           - Login and get access + refresh tokens
     POST   /auth/refresh         - Get new access token using refresh token
     POST   /auth/logout          - Logout (revoke refresh token)
     POST   /auth/logout-all      - Logout all sessions
@@ -19,7 +19,6 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +32,7 @@ from src.auth.refresh_tokens import (
 )
 from src.auth.schemas import (
     AccessTokenResponse,
+    LoginRequest,
     MessageResponse,
     RefreshTokenRequest,
     RegisterResponse,
@@ -89,32 +89,33 @@ async def list_sessions(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/token", response_model=TokenResponse)
 async def login(
     request: Request,
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_request: LoginRequest,
     user_manager: UserManager = Depends(get_user_manager),
     session: AsyncSession = Depends(get_session_dependency),
 ):
-    """
-    Login and receive access + refresh tokens.
+    """Login with JSON body and receive access + refresh tokens."""
+    # Create credentials object for FastAPI-Users authenticate method
+    class Credentials:
+        def __init__(self, username: str, password: str):
+            self.username = username
+            self.password = password
 
-    Use form data: username (email) and password.
-    """
-    user = await user_manager.authenticate(credentials=form_data)
+    credentials = Credentials(login_request.email, login_request.password)
+    user = await user_manager.authenticate(credentials=credentials)
 
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"},
         )
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Account is disabled",
-            headers={"WWW-Authenticate": "Bearer"},
         )
 
     jwt_strategy = get_jwt_strategy()

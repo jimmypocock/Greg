@@ -51,7 +51,7 @@ All commands use the `greg` CLI (via `uv run greg <command>`):
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/auth/register` | POST | None | Register (first user = admin, others need invite) |
-| `/auth/login` | POST | None | Login, get access + refresh tokens |
+| `/auth/token` | POST | None | Login with JSON body, get tokens |
 | `/auth/refresh` | POST | None | Exchange refresh token for new tokens |
 | `/auth/logout` | POST | None | Revoke refresh token |
 | `/auth/logout-all` | POST | JWT | Revoke all sessions |
