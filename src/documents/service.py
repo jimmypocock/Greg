@@ -5,18 +5,30 @@ Replaces FAISS-based DocumentProcessor with PostgreSQL storage.
 """
 
 import asyncio
-import hashlib
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+from urllib.parse import urlparse
 
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.settings import Config
-from src.database.models import Document, DocumentStatus, EmbeddingProvider
+from src.database.models import Document, DocumentChunk, DocumentStatus
+from src.documents.exceptions import (
+    DocumentNotFoundError,
+    FileOperationError,
+    InvalidFilenameError,
+    InvalidURLError,
+    UnsupportedFileTypeError,
+)
+from src.security.sanitization import is_safe_url, sanitize_filename
+from src.utils.async_io import delete_file_async, write_file_async
 from src.vectorstore.pgvector_store import PgVectorStore
-from src.llm.embeddings import get_embeddings
+
+if TYPE_CHECKING:
+    from src.database.models import User
 
 
 class DocumentService:
@@ -26,6 +38,8 @@ class DocumentService:
     Handles file parsing, chunking, embedding generation, and storage to pgvector.
     """
 
+    ALLOWED_EXTENSIONS = {".pdf", ".txt", ".csv", ".md", ".docx", ".xlsx", ".png", ".jpg", ".jpeg"}
+
     def __init__(self, session: AsyncSession, config: Optional[Config] = None):
         self.session = session
         self.config = config or Config()
@@ -33,6 +47,148 @@ class DocumentService:
         # Lazy-loaded components
         self._text_splitter = None
         self._file_loaders = None
+
+    # CRUD Operations
+
+    async def get_document(self, document_id: uuid.UUID, user_id: uuid.UUID) -> Document:
+        """Get a document by ID for a specific user."""
+        stmt = select(Document).where(
+            Document.id == document_id,
+            Document.user_id == user_id,
+        )
+        result = await self.session.execute(stmt)
+        document = result.scalar_one_or_none()
+
+        if not document:
+            raise DocumentNotFoundError(str(document_id))
+
+        return document
+
+    async def list_documents(self, user_id: uuid.UUID) -> list[Document]:
+        """List all documents for a user."""
+        stmt = (
+            select(Document)
+            .where(Document.user_id == user_id)
+            .order_by(Document.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def delete_document(
+        self,
+        document_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        """Delete a document and its file."""
+        document = await self.get_document(document_id, user_id)
+
+        try:
+            if document.storage_key and not document.storage_key.startswith("http"):
+                file_path = Path(document.storage_key)
+                if file_path.exists():
+                    await delete_file_async(file_path)
+
+            await self.session.delete(document)
+            await self.session.commit()
+
+        except DocumentNotFoundError:
+            raise
+        except Exception as e:
+            await self.session.rollback()
+            raise FileOperationError(f"Failed to delete document: {e}")
+
+    async def delete_all_documents(self, upload_dir: Path) -> None:
+        """Delete all documents and their files. Admin only."""
+        try:
+            await self.session.execute(delete(DocumentChunk))
+            await self.session.execute(delete(Document))
+            await self.session.commit()
+
+            for file in upload_dir.glob("*"):
+                if file.is_file():
+                    file.unlink()
+
+        except Exception as e:
+            await self.session.rollback()
+            raise FileOperationError(f"Failed to clear documents: {e}")
+
+    async def create_from_file(
+        self,
+        user: "User",
+        filename: str,
+        content: bytes,
+        upload_dir: Path,
+        api_key_id: uuid.UUID | None = None,
+    ) -> Document:
+        """Create a document record from an uploaded file."""
+        safe_filename = sanitize_filename(filename)
+        if not safe_filename:
+            raise InvalidFilenameError()
+
+        file_ext = Path(safe_filename).suffix.lower()
+        if file_ext not in self.ALLOWED_EXTENSIONS:
+            raise UnsupportedFileTypeError(file_ext, list(self.ALLOWED_EXTENSIONS))
+
+        unique_filename = f"{uuid.uuid4().hex[:8]}_{safe_filename}"
+        safe_path = upload_dir / unique_filename
+
+        try:
+            await write_file_async(safe_path, content, mode="wb")
+
+            document = Document(
+                id=uuid.uuid4(),
+                user_id=user.id,
+                api_key_id=api_key_id,
+                name=safe_filename,
+                file_type=file_ext.lstrip("."),
+                file_size=len(content),
+                storage_key=str(safe_path),
+                status=DocumentStatus.PENDING,
+            )
+            self.session.add(document)
+            await self.session.commit()
+            await self.session.refresh(document)
+
+            return document
+
+        except (InvalidFilenameError, UnsupportedFileTypeError):
+            raise
+        except Exception as e:
+            if safe_path.exists():
+                safe_path.unlink()
+            raise FileOperationError(f"Failed to save file: {e}")
+
+    async def create_from_url(
+        self,
+        user: "User",
+        url: str,
+        api_key_id: uuid.UUID | None = None,
+    ) -> Document:
+        """Create a document record from a URL."""
+        if not is_safe_url(url):
+            raise InvalidURLError()
+
+        parsed_url = urlparse(url)
+        url_filename = f"web_{parsed_url.netloc}_{uuid.uuid4().hex[:8]}.txt"
+
+        document = Document(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            api_key_id=api_key_id,
+            name=url_filename,
+            file_type="url",
+            file_size=0,
+            storage_key=url,
+            status=DocumentStatus.PENDING,
+            extra_metadata={"source_url": url},
+        )
+        self.session.add(document)
+        await self.session.commit()
+        await self.session.refresh(document)
+
+        return document
+
+    # Properties (lazy-loaded)
 
     @property
     def text_splitter(self):

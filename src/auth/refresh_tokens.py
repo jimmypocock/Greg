@@ -166,6 +166,55 @@ async def revoke_all_user_tokens(
     return count
 
 
+async def revoke_user_session(
+    session: AsyncSession,
+    session_id: str,
+    user_id: uuid.UUID,
+) -> None:
+    """
+    Revoke a specific session for a user.
+
+    Args:
+        session: Database session
+        session_id: Session ID (UUID string)
+        user_id: User ID (must own the session)
+
+    Raises:
+        InvalidSessionIdError: If session_id is not a valid UUID
+        SessionNotFoundError: If session doesn't exist or doesn't belong to user
+        SessionAlreadyRevokedError: If session is already revoked
+    """
+    from src.auth.exceptions import (
+        InvalidSessionIdError,
+        SessionAlreadyRevokedError,
+        SessionNotFoundError,
+    )
+
+    try:
+        token_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise InvalidSessionIdError()
+
+    result = await session.execute(
+        select(RefreshToken).where(
+            RefreshToken.id == token_uuid,
+            RefreshToken.user_id == user_id,
+        )
+    )
+    refresh_token = result.scalar_one_or_none()
+
+    if not refresh_token:
+        raise SessionNotFoundError()
+
+    if refresh_token.is_revoked:
+        raise SessionAlreadyRevokedError()
+
+    refresh_token.revoke()
+    await session.commit()
+
+    logger.info(f"Revoked session {session_id} for user {user_id}")
+
+
 async def revoke_refresh_token(
     session: AsyncSession,
     token: str,

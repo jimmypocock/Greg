@@ -1,5 +1,7 @@
 """
-Health routes.
+Health check routes.
+
+Provides health and readiness probes for orchestration.
 
 Endpoints:
     GET /health       - Liveness probe (is the process alive?)
@@ -20,28 +22,16 @@ router = APIRouter(prefix="/health", tags=["Health"])
 
 @router.get("")
 async def health():
-    """
-    Liveness probe.
-
-    Returns 200 if the process is alive. Used by orchestrators
-    to determine if the container needs to be restarted.
-    """
+    """Liveness probe. Returns 200 if the process is alive."""
     return {"status": "ok"}
 
 
 @router.get("/ready")
 async def health_ready():
-    """
-    Readiness probe.
-
-    Checks if the service can accept traffic by verifying
-    critical dependencies (database, redis) are reachable.
-    Returns 503 if any dependency is unavailable.
-    """
+    """Readiness probe. Checks database and Redis connectivity."""
     checks = {}
     all_ok = True
 
-    # Check database
     try:
         from sqlalchemy import text
 
@@ -55,7 +45,6 @@ async def health_ready():
         checks["database"] = "error"
         all_ok = False
 
-    # Check Redis
     try:
         from src.jobs.queue import get_redis_pool
 
@@ -74,8 +63,8 @@ async def health_ready():
 
     if all_ok:
         return response_data
-    else:
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content=response_data,
-        )
+
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=response_data,
+    )

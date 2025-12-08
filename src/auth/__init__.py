@@ -22,12 +22,28 @@ from src.auth.dependencies import (
     get_current_user_with_api_key,
     require_admin,
 )
+from src.auth.exceptions import (
+    AuthError,
+    EmailAlreadyExistsError,
+    ExpiredTokenError,
+    InvalidCredentialsError,
+    InvalidInviteCodeError,
+    InvalidSessionIdError,
+    InvalidTokenError,
+    RevokedTokenError,
+    SessionAlreadyRevokedError,
+    SessionNotFoundError,
+    UserDisabledError,
+    UserNotFoundError,
+)
+from src.auth.handlers import register_auth_exception_handlers
 from src.auth.refresh_tokens import (
     cleanup_expired_tokens,
     create_refresh_token,
     get_active_refresh_tokens,
     revoke_all_user_tokens,
     revoke_refresh_token,
+    revoke_user_session,
     rotate_refresh_token,
     validate_refresh_token,
 )
@@ -62,12 +78,21 @@ __all__ = [
     "get_auth_context",
     "get_auth_context_optional",
     "require_admin",
-    # Legacy dependencies
-    "AdminUser",
-    "CurrentUser",
-    "OptionalUser",
-    "get_current_user_optional_with_api_key",
-    "get_current_user_with_api_key",
+    # Exceptions
+    "AuthError",
+    "EmailAlreadyExistsError",
+    "ExpiredTokenError",
+    "InvalidCredentialsError",
+    "InvalidInviteCodeError",
+    "InvalidSessionIdError",
+    "InvalidTokenError",
+    "RevokedTokenError",
+    "SessionAlreadyRevokedError",
+    "SessionNotFoundError",
+    "UserDisabledError",
+    "UserNotFoundError",
+    # Exception handlers
+    "register_auth_exception_handlers",
     # FastAPI-Users
     "UserManager",
     "auth_backend",
@@ -78,12 +103,19 @@ __all__ = [
     "get_jwt_strategy",
     "get_user_manager",
     "optional_current_user",
+    # Legacy dependencies
+    "AdminUser",
+    "CurrentUser",
+    "OptionalUser",
+    "get_current_user_optional_with_api_key",
+    "get_current_user_with_api_key",
     # Refresh tokens
     "cleanup_expired_tokens",
     "create_refresh_token",
     "get_active_refresh_tokens",
     "revoke_all_user_tokens",
     "revoke_refresh_token",
+    "revoke_user_session",
     "rotate_refresh_token",
     "validate_refresh_token",
     # Schemas

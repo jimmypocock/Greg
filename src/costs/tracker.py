@@ -277,3 +277,86 @@ async def get_recent_requests(
 
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_all_daily_costs(
+    session: AsyncSession,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    user_id: uuid.UUID | None = None,
+) -> list[DailyCostSummary]:
+    """
+    Get daily cost aggregates for all users (admin).
+
+    Args:
+        session: Database session
+        start_date: Start date (defaults to 30 days ago)
+        end_date: End date (defaults to today)
+        user_id: Optional user ID to filter by
+
+    Returns:
+        List of daily cost summaries.
+    """
+    if end_date is None:
+        end_date = date.today()
+    if start_date is None:
+        start_date = end_date - timedelta(days=30)
+
+    # Aggregate by date, provider, model
+    stmt = (
+        select(
+            func.date(AIRequest.created_at).label("date"),
+            AIRequest.provider,
+            AIRequest.model,
+            func.count().label("total_requests"),
+            func.sum(func.cast(AIRequest.success, Integer)).label("successful_requests"),
+            func.sum(AIRequest.input_tokens).label("total_input_tokens"),
+            func.sum(AIRequest.output_tokens).label("total_output_tokens"),
+            func.sum(AIRequest.cached_tokens).label("total_cached_tokens"),
+            func.sum(AIRequest.input_cost_usd).label("total_input_cost_usd"),
+            func.sum(AIRequest.output_cost_usd).label("total_output_cost_usd"),
+            func.sum(AIRequest.total_cost_usd).label("total_cost_usd"),
+            func.avg(AIRequest.latency_ms).label("avg_latency_ms"),
+        )
+        .where(
+            func.date(AIRequest.created_at) >= start_date,
+            func.date(AIRequest.created_at) <= end_date,
+        )
+    )
+
+    # Optional user filter
+    if user_id is not None:
+        stmt = stmt.where(AIRequest.user_id == user_id)
+
+    stmt = stmt.group_by(
+        func.date(AIRequest.created_at),
+        AIRequest.provider,
+        AIRequest.model,
+    ).order_by(func.date(AIRequest.created_at).desc())
+
+    result = await session.execute(stmt)
+    rows = result.all()
+
+    summaries = []
+    for row in rows:
+        total = row.total_requests
+        successful = row.successful_requests or 0
+        summaries.append(
+            DailyCostSummary(
+                date=row.date,
+                provider=row.provider,
+                model=row.model,
+                total_requests=total,
+                successful_requests=successful,
+                failed_requests=total - successful,
+                total_input_tokens=row.total_input_tokens or 0,
+                total_output_tokens=row.total_output_tokens or 0,
+                total_cached_tokens=row.total_cached_tokens or 0,
+                total_input_cost_usd=row.total_input_cost_usd or Decimal("0"),
+                total_output_cost_usd=row.total_output_cost_usd or Decimal("0"),
+                total_cost_usd=row.total_cost_usd or Decimal("0"),
+                avg_latency_ms=int(row.avg_latency_ms) if row.avg_latency_ms else None,
+            )
+        )
+
+    return summaries

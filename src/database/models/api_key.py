@@ -33,7 +33,7 @@ class APIKey(Base, TimestampMixin):
         index=True,
     )
     key_prefix: Mapped[str] = mapped_column(
-        String(8),
+        String(12),
         nullable=False,
     )
     name: Mapped[str] = mapped_column(
@@ -46,10 +46,6 @@ class APIKey(Base, TimestampMixin):
         nullable=False,
     )
     last_used_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-    expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -68,8 +64,4 @@ class APIKey(Base, TimestampMixin):
     @property
     def is_valid(self) -> bool:
         """Check if API key is still valid."""
-        if not self.is_active:
-            return False
-        if self.expires_at and datetime.now(self.expires_at.tzinfo) > self.expires_at:
-            return False
-        return True
+        return self.is_active

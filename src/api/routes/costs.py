@@ -1,82 +1,31 @@
 """
 AI cost tracking routes.
 
+Provides cost tracking and usage statistics for AI requests.
+
 Endpoints:
-    GET /costs           - Get user's daily cost summary
-    GET /costs/requests  - Get recent AI requests
-    GET /costs/total     - Get total cost for a period
+    GET /costs - Get user's cost summary with optional detail
 """
 
-import logging
 from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth import CurrentUser, AdminUser
-from src.database import get_session_dependency, User
-from src.costs import get_user_daily_costs, get_user_total_cost, get_recent_requests
+from src.auth import CurrentUser
+from src.costs import get_recent_requests, get_user_daily_costs
+from src.costs.schemas import (
+    CostSummaryResponse,
+    DailyCostResponse,
+    RequestLogResponse,
+)
+from src.database import get_session_dependency
 
-logger = logging.getLogger(__name__)
-
-router = APIRouter()
-
-
-class DailyCostResponse(BaseModel):
-    """Daily cost summary response."""
-
-    date: str
-    provider: str
-    model: str
-    total_requests: int
-    successful_requests: int
-    failed_requests: int
-    total_input_tokens: int
-    total_output_tokens: int
-    total_cached_tokens: int
-    total_input_cost_usd: str
-    total_output_cost_usd: str
-    total_cost_usd: str
-    avg_latency_ms: int | None
+router = APIRouter(tags=["Costs"])
 
 
-class CostSummaryResponse(BaseModel):
-    """Cost summary response."""
-
-    period_start: str
-    period_end: str
-    total_cost_usd: str
-    total_requests: int
-    daily_breakdown: list[DailyCostResponse]
-
-
-class RequestLogResponse(BaseModel):
-    """AI request log response."""
-
-    id: str
-    request_type: str
-    provider: str
-    model: str
-    input_tokens: int
-    output_tokens: int
-    cached_tokens: int
-    input_cost_usd: str
-    output_cost_usd: str
-    total_cost_usd: str
-    latency_ms: int | None
-    success: bool
-    error_message: str | None
-    created_at: str
-
-
-class TotalCostResponse(BaseModel):
-    """Total cost response."""
-
-    period_start: str
-    period_end: str
-    total_cost_usd: str
+# Routes
 
 
 @router.get("/costs", response_model=CostSummaryResponse)
@@ -84,17 +33,18 @@ async def get_costs(
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
     days: Annotated[int, Query(ge=1, le=365)] = 30,
+    detail: Annotated[bool, Query()] = False,
 ):
     """
-    Get daily cost summary for the current user.
+    Get cost summary for the current user.
 
     Args:
-        days: Number of days to include (default: 30)
+        days: Number of days to include (default 30, max 365)
+        detail: Include individual request logs
     """
     end_date = date.today()
     start_date = end_date - timedelta(days=days - 1)
 
-    # Get daily costs
     daily_costs = await get_user_daily_costs(
         session=session,
         user_id=user.id,
@@ -102,9 +52,35 @@ async def get_costs(
         end_date=end_date,
     )
 
-    # Calculate totals
     total_cost = sum(d.total_cost_usd for d in daily_costs)
     total_requests = sum(d.total_requests for d in daily_costs)
+
+    requests = None
+    if detail:
+        request_logs = await get_recent_requests(
+            session=session,
+            user_id=user.id,
+            limit=200,
+        )
+        requests = [
+            RequestLogResponse(
+                id=str(r.id),
+                request_type=r.request_type.value,
+                provider=r.provider.value,
+                model=r.model,
+                input_tokens=r.input_tokens,
+                output_tokens=r.output_tokens,
+                cached_tokens=r.cached_tokens,
+                input_cost_usd=str(r.input_cost_usd),
+                output_cost_usd=str(r.output_cost_usd),
+                total_cost_usd=str(r.total_cost_usd),
+                latency_ms=r.latency_ms,
+                success=r.success,
+                error_message=r.error_message,
+                created_at=r.created_at.isoformat(),
+            )
+            for r in request_logs
+        ]
 
     return CostSummaryResponse(
         period_start=start_date.isoformat(),
@@ -129,72 +105,5 @@ async def get_costs(
             )
             for d in daily_costs
         ],
-    )
-
-
-@router.get("/costs/requests", response_model=list[RequestLogResponse])
-async def get_requests(
-    user: CurrentUser,
-    session: Annotated[AsyncSession, Depends(get_session_dependency)],
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-):
-    """
-    Get recent AI requests for the current user.
-
-    Args:
-        limit: Maximum number of requests to return (default: 50)
-    """
-    requests = await get_recent_requests(
-        session=session,
-        user_id=user.id,
-        limit=limit,
-    )
-
-    return [
-        RequestLogResponse(
-            id=str(r.id),
-            request_type=r.request_type.value,
-            provider=r.provider.value,
-            model=r.model,
-            input_tokens=r.input_tokens,
-            output_tokens=r.output_tokens,
-            cached_tokens=r.cached_tokens,
-            input_cost_usd=str(r.input_cost_usd),
-            output_cost_usd=str(r.output_cost_usd),
-            total_cost_usd=str(r.total_cost_usd),
-            latency_ms=r.latency_ms,
-            success=r.success,
-            error_message=r.error_message,
-            created_at=r.created_at.isoformat(),
-        )
-        for r in requests
-    ]
-
-
-@router.get("/costs/total", response_model=TotalCostResponse)
-async def get_total_cost(
-    user: CurrentUser,
-    session: Annotated[AsyncSession, Depends(get_session_dependency)],
-    days: Annotated[int, Query(ge=1, le=365)] = 30,
-):
-    """
-    Get total cost for a period.
-
-    Args:
-        days: Number of days to include (default: 30)
-    """
-    end_date = date.today()
-    start_date = end_date - timedelta(days=days - 1)
-
-    total = await get_user_total_cost(
-        session=session,
-        user_id=user.id,
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-    return TotalCostResponse(
-        period_start=start_date.isoformat(),
-        period_end=end_date.isoformat(),
-        total_cost_usd=str(total),
+        requests=requests,
     )

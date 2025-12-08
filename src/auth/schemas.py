@@ -5,12 +5,15 @@ Defines request/response schemas for auth endpoints and FastAPI-Users integratio
 """
 
 import uuid
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi_users import schemas
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from src.database.models import UserRole
+
+if TYPE_CHECKING:
+    from src.database.models import RefreshToken, User
 
 
 # Schemas
@@ -52,6 +55,18 @@ class RegisterResponse(BaseModel):
     is_superuser: bool
     is_verified: bool
 
+    @classmethod
+    def from_model(cls, user: "User") -> "RegisterResponse":
+        """Create response from User model."""
+        return cls(
+            id=str(user.id),
+            email=user.email,
+            role=user.role.value,
+            is_active=user.is_active,
+            is_superuser=user.is_superuser,
+            is_verified=user.is_verified,
+        )
+
 
 class SessionListResponse(BaseModel):
     """List of active sessions."""
@@ -68,6 +83,16 @@ class SessionResponse(BaseModel):
     expires_at: str
     device_info: dict[str, Any] | None
     is_current: bool = False
+
+    @classmethod
+    def from_model(cls, token: "RefreshToken") -> "SessionResponse":
+        """Create response from RefreshToken model."""
+        return cls(
+            id=str(token.id),
+            created_at=token.created_at.isoformat(),
+            expires_at=token.expires_at.isoformat(),
+            device_info=token.device_info,
+        )
 
 
 class TokenResponse(BaseModel):

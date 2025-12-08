@@ -35,24 +35,37 @@ Usage:
         print(f"{status} {name}: {info.get('reason', 'Ready')}")
 """
 
-from .base import BaseLLMProvider, LLMResponse
-from .factory import get_provider, get_available_providers, get_default_provider_info
-from .anthropic_provider import AnthropicProvider
-from .openai_provider import OpenAIProvider
-from .google_provider import GoogleProvider
-from .ollama_provider import OllamaProvider
+from src.llm.anthropic_provider import AnthropicProvider
+from src.llm.base import BaseLLMProvider, LLMResponse
+from src.llm.factory import get_available_providers, get_default_provider_info, get_provider
+from src.llm.google_provider import GoogleProvider
+from src.llm.ollama_provider import OllamaProvider
+from src.llm.openai_provider import OpenAIProvider
+from src.llm.schemas import (
+    DefaultModelInfo,
+    ModelInfo,
+    ModelsListResponse,
+    ProviderInfo,
+    RecommendedModel,
+)
 
 __all__ = [
     # Core
     "BaseLLMProvider",
     "LLMResponse",
     # Factory
-    "get_provider",
     "get_available_providers",
     "get_default_provider_info",
+    "get_provider",
     # Providers
     "AnthropicProvider",
-    "OpenAIProvider",
     "GoogleProvider",
     "OllamaProvider",
+    "OpenAIProvider",
+    # Schemas
+    "DefaultModelInfo",
+    "ModelInfo",
+    "ModelsListResponse",
+    "ProviderInfo",
+    "RecommendedModel",
 ]

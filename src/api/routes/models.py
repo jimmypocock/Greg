@@ -1,30 +1,58 @@
 """
 Models route.
 
+Provides information about available LLM providers and models.
+
 Endpoints:
     GET /models - List available LLM models and providers
 """
 
 import logging
 import os
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
 from src.api.dependencies import get_config
 from src.config.settings import Config
+from src.llm import (
+    DefaultModelInfo,
+    ModelInfo,
+    ModelsListResponse,
+    ProviderInfo,
+    RecommendedModel,
+)
 
 RECOMMENDED_MODELS = {
-    "openai": [
-        {"name": "gpt-5.1", "description": "Primary - best with caching"},
-        {"name": "gpt-5-mini", "description": "Budget option"},
-    ],
     "anthropic": [
-        {"name": "claude-sonnet-4-5-20250929", "description": "Primary - highest quality"},
-        {"name": "claude-haiku-4-5-20251015", "description": "Budget - fast and cost-effective"},
+        RecommendedModel(
+            name="claude-sonnet-4-5-20250929",
+            description="Primary - highest quality",
+        ),
+        RecommendedModel(
+            name="claude-haiku-4-5-20251015",
+            description="Budget - fast and cost-effective",
+        ),
     ],
     "google": [
-        {"name": "gemini-2.5-flash", "description": "Primary - production ready"},
-        {"name": "gemini-2.5-flash-lite", "description": "Budget - fastest, lowest cost"},
+        RecommendedModel(
+            name="gemini-2.5-flash",
+            description="Primary - production ready",
+        ),
+        RecommendedModel(
+            name="gemini-2.5-flash-lite",
+            description="Budget - fastest, lowest cost",
+        ),
+    ],
+    "openai": [
+        RecommendedModel(
+            name="gpt-5.1",
+            description="Primary - best with caching",
+        ),
+        RecommendedModel(
+            name="gpt-5-mini",
+            description="Budget option",
+        ),
     ],
 }
 
@@ -35,44 +63,44 @@ router = APIRouter(prefix="/models", tags=["Models"])
 
 # Public functions
 
-@router.get("")
-async def list_models(config: Config = Depends(get_config)):
+
+@router.get("", response_model=ModelsListResponse)
+async def list_models(
+    config: Annotated[Config, Depends(get_config)],
+):
     """List available LLM models and providers."""
     providers = {
-        "ollama": _get_ollama_provider(),
-        "openai": _get_cloud_provider("openai", "OPENAI_API_KEY"),
         "anthropic": _get_cloud_provider("anthropic", "ANTHROPIC_API_KEY"),
         "google": _get_cloud_provider("google", "GOOGLE_API_KEY"),
+        "ollama": _get_ollama_provider(),
+        "openai": _get_cloud_provider("openai", "OPENAI_API_KEY"),
     }
 
-    return {
-        "default": {
-            "provider": config.LLM_PROVIDER,
-            "model": config.LLM_MODEL,
-        },
-        "providers": providers,
-    }
+    return ModelsListResponse(
+        default=DefaultModelInfo(
+            model=config.LLM_MODEL,
+            provider=config.LLM_PROVIDER,
+        ),
+        providers=providers,
+    )
 
 
 # Private functions
 
-def _get_cloud_provider(provider: str, env_var: str) -> dict:
+
+def _get_cloud_provider(provider: str, env_var: str) -> ProviderInfo:
     """Get cloud provider info."""
     api_key = os.getenv(env_var, "").strip()
     available = bool(api_key)
 
-    result = {
-        "available": available,
-        "recommended": RECOMMENDED_MODELS.get(provider, []),
-    }
-
-    if not available:
-        result["reason"] = f"{env_var} not set"
-
-    return result
+    return ProviderInfo(
+        available=available,
+        reason=None if available else f"{env_var} not set",
+        recommended=RECOMMENDED_MODELS.get(provider, []),
+    )
 
 
-def _get_ollama_provider() -> dict:
+def _get_ollama_provider() -> ProviderInfo:
     """Get Ollama provider info with installed models."""
     try:
         import ollama
@@ -89,21 +117,23 @@ def _get_ollama_provider() -> dict:
             else:
                 size = f"{size_bytes}B"
 
-            models.append({
-                "name": model.get("model", "unknown"),
-                "size": size,
-            })
+            models.append(
+                ModelInfo(
+                    name=model.get("model", "unknown"),
+                    size=size,
+                )
+            )
 
-        return {
-            "available": len(models) > 0,
-            "reason": None if models else "No models installed",
-            "models": models,
-        }
+        return ProviderInfo(
+            available=len(models) > 0,
+            models=models,
+            reason=None if models else "No models installed",
+        )
 
     except Exception as e:
         logger.warning(f"Could not fetch Ollama models: {e}")
-        return {
-            "available": False,
-            "reason": "Ollama not running",
-            "models": [],
-        }
+        return ProviderInfo(
+            available=False,
+            models=[],
+            reason="Ollama not running",
+        )

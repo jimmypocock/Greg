@@ -13,8 +13,8 @@ from src.api.routes import (
     jobs,
     models,
     root,
-    search,
     storage,
+    web_search,
     websocket,
 )
 
@@ -29,7 +29,7 @@ __all__ = [
     "jobs",
     "models",
     "root",
-    "search",
+    "web_search",
     "storage",
     "websocket",
 ]

@@ -37,7 +37,7 @@ def upgrade() -> None:
 
         # Key identification
         sa.Column("key_hash", sa.String(length=255), nullable=False),
-        sa.Column("key_prefix", sa.String(length=8), nullable=False),
+        sa.Column("key_prefix", sa.String(length=12), nullable=False),
         sa.Column("name", sa.String(length=100), nullable=False),
 
         # Ownership
@@ -47,7 +47,6 @@ def upgrade() -> None:
         sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
 
         # Validity
-        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
 
         # Timestamps
@@ -63,7 +62,6 @@ def upgrade() -> None:
     op.create_index(f"ix_{TABLE_NAME}_key_hash", TABLE_NAME, ["key_hash"], unique=True)
     op.create_index(f"ix_{TABLE_NAME}_user_id", TABLE_NAME, ["user_id"])
     op.create_index(f"ix_{TABLE_NAME}_is_active", TABLE_NAME, ["is_active"])
-    op.create_index(f"ix_{TABLE_NAME}_expires_at", TABLE_NAME, ["expires_at"])
 
     # Create triggers
     create_updated_at_trigger(TABLE_NAME)
@@ -74,7 +72,6 @@ def downgrade() -> None:
 
     drop_updated_at_trigger(TABLE_NAME)
 
-    op.drop_index(f"ix_{TABLE_NAME}_expires_at", table_name=TABLE_NAME)
     op.drop_index(f"ix_{TABLE_NAME}_is_active", table_name=TABLE_NAME)
     op.drop_index(f"ix_{TABLE_NAME}_user_id", table_name=TABLE_NAME)
     op.drop_index(f"ix_{TABLE_NAME}_key_hash", table_name=TABLE_NAME)

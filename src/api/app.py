@@ -14,6 +14,14 @@ from slowapi.errors import RateLimitExceeded
 
 from src.api.lifespan import lifespan
 from src.api.rate_limit import limiter
+from src.admin import register_admin_exception_handlers
+from src.api_keys import register_api_key_exception_handlers
+from src.ask import register_ask_exception_handlers
+from src.auth import register_auth_exception_handlers
+from src.documents import register_document_exception_handlers
+from src.jobs import register_job_exception_handlers
+from src.search import register_search_exception_handlers
+from src.storage import register_storage_exception_handlers
 from src.api.routes import (
     admin,
     api_keys,
@@ -25,8 +33,8 @@ from src.api.routes import (
     jobs,
     models,
     root,
-    search,
     storage,
+    web_search,
     websocket,
 )
 
@@ -53,6 +61,9 @@ def create_app() -> FastAPI:
 
     # Configure rate limiting
     _configure_rate_limiting(app)
+
+    # Configure exception handlers
+    _configure_exception_handlers(app)
 
     # Register routes
     _register_routes(app)
@@ -89,6 +100,18 @@ def _configure_cors(app: FastAPI) -> None:
     )
 
 
+def _configure_exception_handlers(app: FastAPI) -> None:
+    """Configure exception handlers for domain exceptions."""
+    register_admin_exception_handlers(app)
+    register_api_key_exception_handlers(app)
+    register_ask_exception_handlers(app)
+    register_auth_exception_handlers(app)
+    register_document_exception_handlers(app)
+    register_job_exception_handlers(app)
+    register_search_exception_handlers(app)
+    register_storage_exception_handlers(app)
+
+
 def _configure_rate_limiting(app: FastAPI) -> None:
     """Configure rate limiting middleware."""
     app.state.limiter = limiter
@@ -116,7 +139,7 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(ask.router, tags=["Ask"])
 
     # Search routes (web search, authenticated)
-    app.include_router(search.router, tags=["Search"])
+    app.include_router(web_search.router, tags=["Search"])
 
     # Storage routes (authenticated)
     app.include_router(storage.router, tags=["Storage"])
@@ -135,5 +158,3 @@ def _register_routes(app: FastAPI) -> None:
 
     # WebSocket routes
     app.include_router(websocket.router, tags=["WebSocket"])
-
-

@@ -1,87 +1,96 @@
 """
 Job management routes.
 
+Provides endpoints for monitoring and controlling background jobs.
+
 Endpoints:
-    GET  /jobs           - List all jobs (admin only)
-    GET  /jobs/{job_id}  - Get job status
+    GET  /jobs              - List all jobs (admin only)
+    GET  /jobs/{job_id}     - Get job status
     POST /jobs/{job_id}/cancel - Cancel a job
 """
 
 import logging
-from typing import Optional
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
-from src.auth import CurrentUser, AdminUser
-from src.database import User
-from src.jobs import job_manager, JobStatus, JobType
+from src.auth import AdminUser, CurrentUser
+from src.jobs import (
+    JobCancelResponse,
+    JobCannotBeCancelledError,
+    JobCancellationError,
+    JobDetailResponse,
+    JobListResponse,
+    JobNotFoundError,
+    JobProgressResponse,
+    JobResponse,
+    JobStatus,
+    JobType,
+    job_manager,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
-@router.get("")
-async def list_jobs(
-    admin: AdminUser,
-    status: Optional[JobStatus] = Query(None, description="Filter by job status"),
-    job_type: Optional[JobType] = Query(None, description="Filter by job type"),
-    limit: int = Query(50, ge=1, le=100, description="Maximum jobs to return"),
-):
-    """
-    List all jobs with optional filtering. Admin only.
-
-    Returns jobs sorted by creation time (newest first).
-    """
-    jobs = await job_manager.list_jobs(
-        status=status,
-        job_type=job_type,
-        limit=limit,
-    )
-
-    return {
-        "jobs": [job.to_dict() for job in jobs],
-        "count": len(jobs),
-    }
+# Routes
 
 
-@router.get("/{job_id}")
-async def get_job(job_id: str, user: CurrentUser):
-    """
-    Get the status and details of a specific job.
-
-    Returns current progress, result (if completed), or error (if failed).
-    """
-    job = await job_manager.get_job(job_id)
-
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    return {"job": job.to_dict()}
-
-
-@router.post("/{job_id}/cancel")
+@router.post("/{job_id}/cancel", response_model=JobCancelResponse)
 async def cancel_job(job_id: str, user: CurrentUser):
-    """
-    Cancel a pending or running job.
-
-    Note: Cancellation is best-effort. Jobs may complete before
-    cancellation takes effect.
-    """
+    """Cancel a pending or running job. Cancellation is best-effort."""
     job = await job_manager.get_job(job_id)
 
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise JobNotFoundError(job_id)
 
     if job.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot cancel job with status: {job.status.value}",
-        )
+        raise JobCannotBeCancelledError(job.status.value)
 
     success = await job_manager.cancel_job(job_id)
 
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to cancel job")
+        raise JobCancellationError()
 
-    return {"message": "Job cancelled", "job_id": job_id}
+    return JobCancelResponse(job_id=job_id, message="Job cancelled")
+
+
+@router.get("/{job_id}", response_model=JobDetailResponse)
+async def get_job(job_id: str, user: CurrentUser):
+    """Get the status and details of a specific job."""
+    job = await job_manager.get_job(job_id)
+
+    if not job:
+        raise JobNotFoundError(job_id)
+
+    return JobDetailResponse(job=JobResponse.from_model(job))
+
+
+@router.get("", response_model=JobListResponse)
+async def list_jobs(
+    admin: AdminUser,
+    status_filter: Annotated[
+        JobStatus | None,
+        Query(alias="status", description="Filter by job status"),
+    ] = None,
+    job_type: Annotated[
+        JobType | None,
+        Query(description="Filter by job type"),
+    ] = None,
+    limit: Annotated[
+        int,
+        Query(ge=1, le=100, description="Maximum jobs to return"),
+    ] = 50,
+):
+    """List all jobs with optional filtering. Admin only."""
+    jobs = await job_manager.list_jobs(
+        status=status_filter,
+        job_type=job_type,
+        limit=limit,
+    )
+
+    return JobListResponse(
+        count=len(jobs),
+        jobs=[JobResponse.from_model(job) for job in jobs],
+    )

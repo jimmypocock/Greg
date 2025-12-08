@@ -288,3 +288,136 @@ uv run alembic downgrade -1
 4. **Validation**: Use Pydantic models for request/response schemas
 5. **Errors**: Return proper HTTP status codes with detail messages
 6. **Models**: One model per file in `src/database/models/`
+
+## Code Conventions
+
+### Route File Structure
+
+```python
+"""
+Module description.
+
+Brief explanation of what this module provides.
+
+Endpoints:
+    POST   /resource/          - Create resource
+    GET    /resource/          - List resources
+    DELETE /resource/{id}      - Delete resource
+"""
+
+import logging
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.auth import CurrentUser
+from src.auth.schemas import (
+    SchemaA,
+    SchemaB,
+)
+from src.database import Model, get_session_dependency
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/resource", tags=["Resource"])
+
+
+# Public functions
+
+@router.post("/", response_model=CreateResponse, status_code=status.HTTP_201_CREATED)
+async def create_resource(
+    request: CreateRequest,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session_dependency)],
+):
+    """Create a new resource."""
+    # Implementation
+    logger.info(f"User {user.email} created resource")
+    return response
+
+
+# Private functions
+
+def _helper_function(arg: Type) -> ReturnType:
+    """Helper function description."""
+    return result
+```
+
+### Section Comments
+
+Use single blank line after section comments:
+
+```python
+# Public functions
+
+@router.get("/")
+async def list_items():
+    ...
+
+
+# Private functions
+
+def _helper():
+    ...
+```
+
+### Dependency Injection
+
+Use type aliases and `Annotated` for clean signatures:
+
+```python
+# Good - type alias for common dependencies
+async def get_item(user: CurrentUser):
+    ...
+
+# Good - Annotated for session
+async def list_items(
+    session: Annotated[AsyncSession, Depends(get_session_dependency)],
+):
+    ...
+
+# Avoid - verbose inline Depends
+async def get_item(user: Annotated[User, Depends(current_active_user)]):
+    ...
+```
+
+### Schemas
+
+- All schemas live in `src/auth/schemas.py`
+- Alphabetize by class name
+- Use `Field()` for validation
+- Naming: `{Resource}{Action}Request/Response`
+
+```python
+# Schemas
+
+class ResourceCreateRequest(BaseModel):
+    """Request to create a resource."""
+
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class ResourceResponse(BaseModel):
+    """Resource info response."""
+
+    id: str
+    name: str
+    created_at: str
+```
+
+### Logging
+
+- Log security/audit events (login, logout, key creation/revocation)
+- Don't log routine read operations (Uvicorn handles access logs)
+- Use f-strings with user context: `logger.info(f"User {user.email} did action")`
+
+### Imports
+
+Organize in groups, alphabetized within each:
+
+1. Standard library (`import logging`, `from typing import ...`)
+2. Third-party (`from fastapi import ...`, `from sqlalchemy import ...`)
+3. Local (`from src.auth import ...`, `from src.database import ...`)

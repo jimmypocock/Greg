@@ -8,8 +8,12 @@ import logging
 import os
 import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from src.auth.schemas import UserCreate
 
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
@@ -22,6 +26,14 @@ from fastapi_users.db import SQLAlchemyUserDatabase
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.exceptions import (
+    EmailAlreadyExistsError,
+    InvalidCredentialsError,
+    InvalidInviteCodeError,
+    InvalidTokenError,
+    UserDisabledError,
+    UserNotFoundError,
+)
 from src.database import Invite, User, UserRole, get_session_dependency
 
 # Constants
@@ -30,6 +42,26 @@ ACCESS_TOKEN_EXPIRE_SECONDS = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", 
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY", secrets.token_urlsafe(32))
 
 logger = logging.getLogger(__name__)
+
+
+# Data classes
+
+
+@dataclass
+class Credentials:
+    """Credentials for authentication."""
+
+    username: str
+    password: str
+
+
+@dataclass
+class LoginResult:
+    """Result of a successful login."""
+
+    user: User
+    access_token: str
+    refresh_token: str
 
 
 # Classes
@@ -49,10 +81,167 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_count = await self.session.scalar(select(func.count(User.id)))
         return user_count == 0
 
+    async def login(
+        self,
+        email: str,
+        password: str,
+        device_info: dict[str, Any] | None = None,
+        request: Optional[Request] = None,
+    ) -> LoginResult:
+        """
+        Authenticate user and generate tokens.
+
+        Args:
+            email: User email
+            password: User password
+            device_info: Optional device/session metadata
+            request: Optional request for hooks
+
+        Returns:
+            LoginResult with user and tokens
+
+        Raises:
+            InvalidCredentialsError: If email/password is wrong
+            UserDisabledError: If user account is disabled
+        """
+        from src.auth.refresh_tokens import create_refresh_token
+
+        credentials = Credentials(username=email, password=password)
+        user = await self.authenticate(credentials)
+
+        if not user:
+            raise InvalidCredentialsError()
+
+        if not user.is_active:
+            raise UserDisabledError()
+
+        jwt_strategy = get_jwt_strategy()
+        access_token = await jwt_strategy.write_token(user)
+
+        refresh_token_plain, _ = await create_refresh_token(
+            self.session,
+            user,
+            device_info=device_info,
+        )
+
+        await self.on_after_login(user, request)
+
+        return LoginResult(
+            user=user,
+            access_token=access_token,
+            refresh_token=refresh_token_plain,
+        )
+
+    async def refresh_tokens(
+        self,
+        refresh_token: str,
+        device_info: dict[str, Any] | None = None,
+    ) -> LoginResult:
+        """
+        Refresh access token using a refresh token.
+
+        Args:
+            refresh_token: The refresh token to validate and rotate
+            device_info: Optional device/session metadata
+
+        Returns:
+            LoginResult with user and new tokens
+
+        Raises:
+            InvalidTokenError: If refresh token is invalid/expired/revoked
+            UserNotFoundError: If user no longer exists
+            UserDisabledError: If user account is disabled
+        """
+        from src.auth.refresh_tokens import rotate_refresh_token, validate_refresh_token
+
+        token_record = await validate_refresh_token(self.session, refresh_token)
+
+        if not token_record:
+            raise InvalidTokenError("Invalid or expired refresh token")
+
+        result = await self.session.execute(
+            select(User).where(User.id == token_record.user_id)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise UserNotFoundError()
+
+        if not user.is_active:
+            raise UserDisabledError()
+
+        jwt_strategy = get_jwt_strategy()
+        access_token = await jwt_strategy.write_token(user)
+
+        new_refresh_token_plain, _ = await rotate_refresh_token(
+            self.session,
+            token_record,
+            device_info=device_info,
+        )
+
+        return LoginResult(
+            user=user,
+            access_token=access_token,
+            refresh_token=new_refresh_token_plain,
+        )
+
     async def mark_invite_used(self, invite: Invite, user_id: uuid.UUID) -> None:
         """Mark an invite as used by a user."""
         invite.used_by = user_id
         invite.used_at = datetime.now(timezone.utc)
+
+    async def register_user(
+        self,
+        user_create: "UserCreate",
+        request: Optional[Request] = None,
+    ) -> User:
+        """
+        Register a new user.
+
+        Handles first-user admin logic and invite code validation.
+
+        Args:
+            user_create: User registration data
+            request: Optional request for hooks
+
+        Returns:
+            Created user
+
+        Raises:
+            InvalidInviteCodeError: If invite code is invalid (non-first user)
+            EmailAlreadyExistsError: If email is already registered
+        """
+        is_first_user = await self.is_first_user()
+
+        if is_first_user:
+            user_create.is_superuser = True
+            user_create.role = UserRole.ADMIN
+            invite = None
+        else:
+            invite = await self.validate_invite_code(
+                user_create.invite_code,
+                user_create.email,
+            )
+            if not invite:
+                raise InvalidInviteCodeError()
+
+        try:
+            created_user = await self.create(
+                user_create,
+                safe=True,
+                request=request,
+            )
+        except Exception as e:
+            error_msg = str(e)
+            if "UNIQUE constraint" in error_msg or "duplicate key" in error_msg.lower():
+                raise EmailAlreadyExistsError()
+            raise
+
+        if invite:
+            await self.mark_invite_used(invite, created_user.id)
+            await self.session.commit()
+
+        return created_user
 
     async def on_after_login(
         self,
