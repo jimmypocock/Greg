@@ -6,7 +6,6 @@ Handles creation, validation, and revocation of database-backed refresh tokens.
 
 import hashlib
 import logging
-import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -15,13 +14,14 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import Config
 from src.database.models import RefreshToken, User
 
 # Constants
 
 REFRESH_TOKEN_BYTES = 32  # 256 bits of entropy
-REFRESH_TOKEN_EXPIRE_DAYS = int(os.environ.get("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
-MAX_SESSIONS_PER_USER = int(os.environ.get("MAX_SESSIONS_PER_USER", "10"))
+REFRESH_TOKEN_EXPIRE_DAYS = Config.REFRESH_TOKEN_EXPIRE_DAYS
+MAX_SESSIONS_PER_USER = Config.MAX_SESSIONS_PER_USER
 
 logger = logging.getLogger(__name__)
 

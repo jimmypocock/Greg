@@ -9,6 +9,8 @@ from typing import Optional
 
 from langchain_core.embeddings import Embeddings
 
+from src.config import Config
+
 from .openai_embeddings import OpenAIEmbeddingProvider, OPENAI_EMBEDDING_DIMENSIONS
 from .local_embeddings import LocalEmbeddingProvider, LOCAL_EMBEDDING_DIMENSIONS
 
@@ -49,9 +51,9 @@ def get_embeddings(
     Raises:
         ValueError: If provider is unknown.
     """
-    # Get provider from env if not specified
+    # Get provider from config if not specified
     if provider is None:
-        provider = os.getenv("EMBEDDING_PROVIDER")
+        provider = Config.EMBEDDING_PROVIDER
 
         # Auto-detect provider based on available API keys
         if provider is None:
@@ -73,9 +75,9 @@ def get_embeddings(
 
     provider_class = PROVIDERS[provider]
 
-    # Get model from env if not specified
+    # Get model from config if not specified
     if model is None:
-        model = os.getenv("EMBEDDING_MODEL")
+        model = Config.EMBEDDING_MODEL
 
     return provider_class(model=model, **kwargs)
 
@@ -141,8 +143,8 @@ def get_available_embedding_providers() -> dict[str, dict]:
 
 def get_default_embedding_info() -> dict:
     """Get info about the currently configured default embedding provider."""
-    provider_name = os.getenv("EMBEDDING_PROVIDER")
-    model_name = os.getenv("EMBEDDING_MODEL")
+    provider_name = Config.EMBEDDING_PROVIDER
+    model_name = Config.EMBEDDING_MODEL
 
     # Auto-detect if not specified
     if provider_name is None:

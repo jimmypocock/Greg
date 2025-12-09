@@ -63,3 +63,16 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
     def is_admin(self) -> bool:
         """Check if user has admin role."""
         return self.role == UserRole.ADMIN or self.is_superuser
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary (for API responses)."""
+        return {
+            "id": str(self.id),
+            "email": self.email,
+            "role": self.role.value,
+            "is_active": self.is_active,
+            "is_superuser": self.is_superuser,
+            "is_verified": self.is_verified,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }

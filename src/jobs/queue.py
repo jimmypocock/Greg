@@ -23,8 +23,13 @@ def get_redis_settings() -> RedisSettings:
 
     Returns:
         RedisSettings for ARQ.
+
+    Raises:
+        ConfigurationError: If REDIS_URL is not set.
     """
-    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+    from src.config.validation import get_required
+
+    redis_url = get_required("REDIS_URL")
 
     # Parse Redis URL
     # Format: redis://[:password@]host[:port][/database]

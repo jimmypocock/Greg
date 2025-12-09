@@ -1,7 +1,7 @@
 """
 Admin management module.
 
-Provides service, schemas, exceptions, and handlers for admin endpoints.
+Provides services, schemas, exceptions, and handlers for admin endpoints.
 """
 
 from src.admin.exceptions import (
@@ -16,6 +16,7 @@ from src.admin.exceptions import (
     UserNotFoundError,
 )
 from src.admin.handlers import register_admin_exception_handlers
+from src.admin.invite_service import InviteService
 from src.admin.schemas import (
     InviteCreateRequest,
     InviteListResponse,
@@ -25,7 +26,7 @@ from src.admin.schemas import (
     UserResponse,
     UserUpdateRequest,
 )
-from src.admin.service import AdminService, get_admin_service
+from src.admin.user_service import UserService
 
 __all__ = [
     # Exceptions
@@ -48,7 +49,7 @@ __all__ = [
     "UserListResponse",
     "UserResponse",
     "UserUpdateRequest",
-    # Service
-    "AdminService",
-    "get_admin_service",
+    # Services
+    "InviteService",
+    "UserService",
 ]

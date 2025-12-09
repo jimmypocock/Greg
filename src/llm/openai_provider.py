@@ -99,7 +99,7 @@ class OpenAIProvider(BaseLLMProvider):
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            max_tokens=kwargs.get("max_tokens", self.max_tokens),
+            max_completion_tokens=kwargs.get("max_tokens", self.max_tokens),
             temperature=kwargs.get("temperature", self.temperature),
         )
 
@@ -150,7 +150,7 @@ class OpenAIProvider(BaseLLMProvider):
         stream = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
-            max_tokens=kwargs.get("max_tokens", self.max_tokens),
+            max_completion_tokens=kwargs.get("max_tokens", self.max_tokens),
             temperature=kwargs.get("temperature", self.temperature),
             stream=True,
             stream_options={"include_usage": True},

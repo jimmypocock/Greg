@@ -48,7 +48,7 @@ async def web_search(
     """Search the web for information and get an AI-generated answer."""
     logger.info(f"Web search: {search_request.question}")
 
-    stream = await service.search_stream(
+    stream = service.search_stream(
         question=search_request.question,
         model_name=search_request.model_name,
         temperature=search_request.temperature,

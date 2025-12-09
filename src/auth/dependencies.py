@@ -191,9 +191,8 @@ Auth = Annotated[AuthContext, Depends(get_auth_context)]
 MaybeAuth = Annotated[AuthContext | None, Depends(get_auth_context_optional)]
 AdminAuth = Annotated[AuthContext, Depends(require_admin)]
 
-# Legacy aliases (for backwards compatibility)
+# User-only aliases (when you don't need full AuthContext)
 CurrentUser = Annotated[User, Depends(get_current_user_with_api_key)]
-OptionalUser = Annotated[User | None, Depends(get_current_user_optional_with_api_key)]
 
 
 async def _get_admin_user(auth: AuthContext = Depends(require_admin)) -> User:
@@ -211,10 +210,9 @@ __all__ = [
     "AdminAuth",
     "Auth",
     "MaybeAuth",
-    # Legacy type aliases
+    # User-only type aliases
     "AdminUser",
     "CurrentUser",
-    "OptionalUser",
     # Functions
     "get_auth_context",
     "get_auth_context_optional",

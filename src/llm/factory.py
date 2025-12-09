@@ -17,8 +17,9 @@ Usage:
     llm = get_provider("ollama", model="mistral")
 """
 
-import os
 from typing import Optional
+
+from src.config import Config
 
 from .base import BaseLLMProvider
 from .anthropic_provider import AnthropicProvider
@@ -60,9 +61,9 @@ def get_provider(
     Raises:
         ValueError: If provider is unknown.
     """
-    # Get provider from env if not specified
+    # Get provider from config if not specified
     if provider is None:
-        provider = os.getenv("LLM_PROVIDER", "ollama")
+        provider = Config.LLM_PROVIDER
 
     provider = provider.lower().strip()
 
@@ -76,9 +77,9 @@ def get_provider(
 
     provider_class = PROVIDERS[provider]
 
-    # Get model from env if not specified
+    # Get model from config if not specified
     if model is None:
-        model = os.getenv("LLM_MODEL")
+        model = Config.LLM_MODEL
 
     return provider_class(model=model, **kwargs)
 
@@ -133,8 +134,8 @@ def get_available_providers() -> dict[str, dict]:
 
 def get_default_provider_info() -> dict:
     """Get info about the currently configured default provider."""
-    provider_name = os.getenv("LLM_PROVIDER", "ollama")
-    model_name = os.getenv("LLM_MODEL")
+    provider_name = Config.LLM_PROVIDER
+    model_name = Config.LLM_MODEL
 
     try:
         provider = get_provider(provider_name, model_name)

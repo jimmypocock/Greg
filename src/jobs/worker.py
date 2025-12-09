@@ -127,5 +127,7 @@ class WorkerSettings:
     max_jobs = 10
     job_timeout = 600  # 10 minutes
     keep_result = 3600  # 1 hour
-    retry_jobs = True
-    max_tries = 3
+    # Disable retries - document processing creates DB records and isn't idempotent
+    # Failed jobs should be manually retried after investigating the error
+    retry_jobs = False
+    max_tries = 1

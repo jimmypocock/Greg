@@ -18,10 +18,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.admin import (
-    AdminService,
     MessageResponse,
     UserListResponse,
     UserResponse,
+    UserService,
     UserUpdateRequest,
 )
 from src.auth import AdminUser
@@ -35,11 +35,11 @@ router = APIRouter()
 # Dependencies
 
 
-async def get_admin_service(
+async def get_user_service(
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
-) -> AdminService:
-    """Get admin service with session."""
-    return AdminService(session=session)
+) -> UserService:
+    """Get user service with session."""
+    return UserService(session=session)
 
 
 # Routes
@@ -48,14 +48,14 @@ async def get_admin_service(
 @router.get("", response_model=UserListResponse)
 async def list_users(
     admin: AdminUser,
-    service: Annotated[AdminService, Depends(get_admin_service)],
+    service: Annotated[UserService, Depends(get_user_service)],
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     is_active: bool | None = None,
     role: str | None = None,
 ):
     """List all users with optional filtering."""
-    users, total = await service.list_users(skip, limit, is_active, role)
+    users, total = await service.list(skip, limit, is_active, role)
 
     return UserListResponse(
         users=[user.to_dict() for user in users],
@@ -67,10 +67,10 @@ async def list_users(
 async def get_user(
     user_id: UUID,
     admin: AdminUser,
-    service: Annotated[AdminService, Depends(get_admin_service)],
+    service: Annotated[UserService, Depends(get_user_service)],
 ):
     """Get user details."""
-    user = await service.get_user(user_id)
+    user = await service.get(user_id)
 
     return UserResponse(user=user.to_dict())
 
@@ -80,10 +80,10 @@ async def update_user(
     user_id: UUID,
     request: UserUpdateRequest,
     admin: AdminUser,
-    service: Annotated[AdminService, Depends(get_admin_service)],
+    service: Annotated[UserService, Depends(get_user_service)],
 ):
     """Update user role or active status."""
-    user = await service.update_user(user_id, admin.id, request)
+    user = await service.update(user_id, admin.id, request)
 
     logger.info(f"Admin {admin.email} updated user {user.email}")
 
@@ -94,10 +94,10 @@ async def update_user(
 async def delete_user(
     user_id: UUID,
     admin: AdminUser,
-    service: Annotated[AdminService, Depends(get_admin_service)],
+    service: Annotated[UserService, Depends(get_user_service)],
 ):
     """Delete a user."""
-    email = await service.delete_user(user_id, admin.id)
+    email = await service.delete(user_id, admin.id)
 
     logger.info(f"Admin {admin.email} deleted user {email}")
 

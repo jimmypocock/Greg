@@ -126,6 +126,18 @@ class UserCreate(schemas.BaseUserCreate):
             raise ValueError("Password must be at least 8 characters")
         return v
 
+    def create_update_dict(self) -> dict:
+        """Override to exclude invite_code from user creation dict."""
+        d = super().create_update_dict()
+        d.pop("invite_code", None)
+        return d
+
+    def create_update_dict_superuser(self) -> dict:
+        """Override to exclude invite_code from superuser creation dict."""
+        d = super().create_update_dict_superuser()
+        d.pop("invite_code", None)
+        return d
+
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
     """Schema for reading user data."""

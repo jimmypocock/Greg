@@ -72,13 +72,17 @@ class PgVectorStore:
         # Create chunk objects
         db_chunks = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+            # Use chunk_index from metadata (global index) if available, else fall back to enumerate
+            metadata = chunk.get('metadata', {})
+            chunk_index = metadata.get('chunk_index', i)
+
             db_chunk = DocumentChunk(
                 id=uuid.uuid4(),
                 document_id=document_id,
-                chunk_index=i,
+                chunk_index=chunk_index,
                 content=chunk['content'],
                 token_count=chunk.get('token_count', 0),
-                chunk_metadata=chunk.get('metadata', {}),
+                chunk_metadata=metadata,
                 embedding_provider=self.provider,
             )
 

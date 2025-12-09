@@ -76,7 +76,12 @@ class DocumentChunk(Base):
 
     # Track which embedding provider was used
     embedding_provider: Mapped[EmbeddingProvider] = mapped_column(
-        Enum(EmbeddingProvider, name="embedding_provider_enum", create_type=False),
+        Enum(
+            EmbeddingProvider,
+            name="embedding_provider_enum",
+            create_type=False,
+            values_callable=lambda x: [e.value for e in x],  # Use .value not .name
+        ),
         nullable=False,
         default=EmbeddingProvider.LOCAL,
     )

@@ -4,10 +4,11 @@ FastAPI application factory.
 Creates and configures the FastAPI application with all routes and middleware.
 """
 
-import os
 import logging
 
 from fastapi import FastAPI
+
+from src.config import Config
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -73,9 +74,7 @@ def create_app() -> FastAPI:
 
 def _configure_cors(app: FastAPI) -> None:
     """Configure CORS middleware."""
-    # Get origins from environment
-    cors_origins = os.environ.get("ALLOWED_ORIGINS", "").split(",")
-    cors_origins = [o.strip() for o in cors_origins if o.strip()]
+    cors_origins = Config.ALLOWED_ORIGINS
 
     # Default development origins if not configured
     if not cors_origins:
@@ -87,8 +86,7 @@ def _configure_cors(app: FastAPI) -> None:
             "http://127.0.0.1:5173",
         ]
 
-    # Allow all origins in development mode
-    allow_all_origins = os.environ.get("CORS_ALLOW_ALL", "false").lower() == "true"
+    allow_all_origins = Config.CORS_ALLOW_ALL
 
     app.add_middleware(
         CORSMiddleware,

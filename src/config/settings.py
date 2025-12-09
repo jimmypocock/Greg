@@ -1,50 +1,76 @@
 import os
-import multiprocessing
 from pathlib import Path
+
 from dotenv import load_dotenv
+
+from src.config.validation import get_optional, get_required
 
 load_dotenv()
 
+
 class Config:
-    # LLM Settings
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
-    LLM_MODEL = os.getenv("LLM_MODEL", "mistral")
-    # Legacy alias for backwards compatibility
-    LOCAL_LLM_MODEL = LLM_MODEL
+    """
+    Application configuration.
 
-    # Embedding settings
-    # Provider: "openai" (1536 dim, paid) or "local" (384 dim, free)
-    # Auto-detects based on OPENAI_API_KEY if not specified
-    EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER")  # None = auto-detect
-    # Model: depends on provider
-    # - OpenAI: text-embedding-3-small (default), text-embedding-ada-002, text-embedding-3-large
-    # - Local: all-MiniLM-L6-v2 (default), all-mpnet-base-v2, etc.
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")  # None = provider default
+    Required vars (no defaults - must be in .env):
+        - LLM_PROVIDER, LLM_MODEL
+        - UPLOAD_DIR, VECTOR_STORE_DIR
 
-    # Directories
-    UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./uploads"))
-    VECTOR_STORE_DIR = Path(os.getenv("VECTOR_STORE_DIR", "./vector_stores"))
+    Tuning params (sensible defaults):
+        - CHUNK_SIZE, CHUNK_OVERLAP, MAX_CONTEXT_LENGTH
+        - NUM_THREADS, BATCH_SIZE, EMBEDDING_BATCH_SIZE
+        - MAX_FILE_SIZE_MB, MAX_MEMORY_GB
+        - TEMPERATURE, TOP_P
+    """
 
-    # File constraints
-    MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", 100))
+    # LLM Settings (required)
+    LLM_PROVIDER = get_required("LLM_PROVIDER")
+    LLM_MODEL = get_required("LLM_MODEL")
+
+    # Embedding settings (optional - auto-detects)
+    EMBEDDING_PROVIDER = get_optional("EMBEDDING_PROVIDER")
+    EMBEDDING_MODEL = get_optional("EMBEDDING_MODEL")
+
+    # Directories (required)
+    UPLOAD_DIR = Path(get_required("UPLOAD_DIR"))
+    VECTOR_STORE_DIR = Path(get_required("VECTOR_STORE_DIR"))
+
+    # File constraints (tuning - has default)
+    MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "100"))
     MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
-    # Performance settings optimized for M3
-    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 800))
-    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 100))
-    MAX_CONTEXT_LENGTH = int(os.getenv("MAX_CONTEXT_LENGTH", 2048))
+    # RAG settings (tuning - has defaults)
+    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "800"))
+    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
+    MAX_CONTEXT_LENGTH = int(os.getenv("MAX_CONTEXT_LENGTH", "2048"))
 
-    # M3 specific optimizations
-    NUM_THREADS = int(os.getenv("NUM_THREADS", 8))  # M3 has 8 cores
-    BATCH_SIZE = int(os.getenv("BATCH_SIZE", 4))
-    EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", 2))  # Smaller batch for embeddings to prevent GPU OOM
+    # Performance settings (tuning - has defaults)
+    NUM_THREADS = int(os.getenv("NUM_THREADS", "8"))
+    BATCH_SIZE = int(os.getenv("BATCH_SIZE", "4"))
+    EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "2"))
 
-    # Memory management
-    MAX_MEMORY_GB = int(os.getenv("MAX_MEMORY_GB", 8))
+    # Memory management (tuning - has default)
+    MAX_MEMORY_GB = int(os.getenv("MAX_MEMORY_GB", "8"))
 
-    # Model parameters
-    TEMPERATURE = float(os.getenv("TEMPERATURE", 0.7))
-    TOP_P = float(os.getenv("TOP_P", 0.9))
+    # Model parameters (tuning - has defaults)
+    TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
+    TOP_P = float(os.getenv("TOP_P", "0.9"))
+
+    # Auth settings (tuning - has defaults)
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+    REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+    MAX_SESSIONS_PER_USER = int(os.getenv("MAX_SESSIONS_PER_USER", "10"))
+
+    # Ollama settings (optional - has default)
+    OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+
+    # CORS settings (optional)
+    ALLOWED_ORIGINS = [
+        origin.strip()
+        for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    CORS_ALLOW_ALL = os.getenv("CORS_ALLOW_ALL", "false").lower() == "true"
 
     @classmethod
     def create_directories(cls):
@@ -56,7 +82,8 @@ class Config:
         """Get optimal settings based on available memory."""
         try:
             import psutil
-            available_memory = psutil.virtual_memory().available / (1024**3)  # GB
+
+            available_memory = psutil.virtual_memory().available / (1024**3)
 
             if available_memory < 4:
                 return {

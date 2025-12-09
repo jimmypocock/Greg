@@ -5,11 +5,12 @@ Supports any model installed via Ollama (Mistral, Llama, Phi, etc.).
 Local models are free to run.
 """
 
-import os
 import time
 from typing import Generator, Optional
 
 import ollama
+
+from src.config import Config
 
 from .base import BaseLLMProvider, LLMResponse
 
@@ -28,7 +29,7 @@ class OllamaProvider(BaseLLMProvider):
         host: Optional[str] = None,
     ):
         super().__init__(model, temperature, max_tokens)
-        self.host = host or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        self.host = host or Config.OLLAMA_HOST
         self.client = ollama.Client(host=self.host)
 
     def is_available(self) -> bool:

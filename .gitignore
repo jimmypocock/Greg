@@ -35,6 +35,10 @@ Thumbs.db
 logs/*
 !logs/.gitkeep
 
+# Documents (user uploads for testing)
+documents/*
+!documents/.gitkeep
+
 # Environment variables
 .env
 .env.*

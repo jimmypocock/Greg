@@ -16,10 +16,10 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.admin import (
-    AdminService,
     InviteCreateRequest,
     InviteListResponse,
     InviteResponse,
+    InviteService,
     MessageResponse,
 )
 from src.auth import AdminUser
@@ -33,11 +33,11 @@ router = APIRouter()
 # Dependencies
 
 
-async def get_admin_service(
+async def get_invite_service(
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
-) -> AdminService:
-    """Get admin service with session."""
-    return AdminService(session=session)
+) -> InviteService:
+    """Get invite service with session."""
+    return InviteService(session=session)
 
 
 # Routes
@@ -46,14 +46,14 @@ async def get_admin_service(
 @router.get("", response_model=InviteListResponse)
 async def list_invites(
     admin: AdminUser,
-    service: Annotated[AdminService, Depends(get_admin_service)],
+    service: Annotated[InviteService, Depends(get_invite_service)],
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     active: bool | None = None,
     used: bool | None = None,
 ):
     """List all invites with optional filtering."""
-    invites, total = await service.list_invites(skip, limit, active, used)
+    invites, total = await service.list(skip, limit, active, used)
 
     return InviteListResponse(
         invites=[invite.to_dict() for invite in invites],
@@ -65,10 +65,10 @@ async def list_invites(
 async def create_invite(
     request: InviteCreateRequest,
     admin: AdminUser,
-    service: Annotated[AdminService, Depends(get_admin_service)],
+    service: Annotated[InviteService, Depends(get_invite_service)],
 ):
     """Create a new invite code."""
-    invite = await service.create_invite(admin.id, request)
+    invite = await service.create(admin.id, request)
 
     logger.info(f"Admin {admin.email} created invite {invite.code}")
 
@@ -84,10 +84,10 @@ async def create_invite(
 async def delete_invite(
     code: str,
     admin: AdminUser,
-    service: Annotated[AdminService, Depends(get_admin_service)],
+    service: Annotated[InviteService, Depends(get_invite_service)],
 ):
     """Revoke an invite code."""
-    await service.delete_invite(code)
+    await service.delete(code)
 
     logger.info(f"Admin {admin.email} revoked invite {code}")
 

@@ -81,3 +81,18 @@ class Invite(Base, TimestampMixin):
         if self.expires_at and datetime.now(self.expires_at.tzinfo) > self.expires_at:
             return False
         return True
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary (for API responses)."""
+        return {
+            "id": str(self.id),
+            "code": self.code,
+            "email": self.email,
+            "created_by": str(self.created_by),
+            "used_by": str(self.used_by) if self.used_by else None,
+            "used_at": self.used_at.isoformat() if self.used_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "is_active": self.is_active,
+            "is_valid": self.is_valid,
+            "created_at": self.created_at.isoformat(),
+        }

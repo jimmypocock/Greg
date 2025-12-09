@@ -15,10 +15,8 @@ from src.auth.dependencies import (
     AuthContext,
     CurrentUser,
     MaybeAuth,
-    OptionalUser,
     get_auth_context,
     get_auth_context_optional,
-    get_current_user_optional_with_api_key,
     get_current_user_with_api_key,
     require_admin,
 )
@@ -103,11 +101,9 @@ __all__ = [
     "get_jwt_strategy",
     "get_user_manager",
     "optional_current_user",
-    # Legacy dependencies
+    # User-only dependencies
     "AdminUser",
     "CurrentUser",
-    "OptionalUser",
-    "get_current_user_optional_with_api_key",
     "get_current_user_with_api_key",
     # Refresh tokens
     "cleanup_expired_tokens",

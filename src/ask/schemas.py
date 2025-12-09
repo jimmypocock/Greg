@@ -17,7 +17,7 @@ class QuestionRequest(BaseModel):
     model_config = {"protected_namespaces": ()}
 
     question: str
-    document_id: str
+    document_id: str = "all"  # "all" searches all docs, or pass a specific UUID
     max_results: int = 5
     model_name: str | None = None
     stream: bool = False

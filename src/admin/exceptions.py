@@ -13,22 +13,6 @@ class AdminError(Exception):
         super().__init__(self.message)
 
 
-class UserNotFoundError(AdminError):
-    """Raised when user is not found."""
-
-    def __init__(self, user_id: str | None = None):
-        msg = f"User {user_id} not found" if user_id else "User not found"
-        super().__init__(msg)
-
-
-class InviteNotFoundError(AdminError):
-    """Raised when invite is not found."""
-
-    def __init__(self, code: str | None = None):
-        msg = f"Invite {code} not found" if code else "Invite not found"
-        super().__init__(msg)
-
-
 class CannotDeleteSelfError(AdminError):
     """Raised when admin tries to delete themselves."""
 
@@ -50,13 +34,6 @@ class CannotDisableSelfError(AdminError):
         super().__init__("Cannot disable yourself")
 
 
-class InviteAlreadyUsedError(AdminError):
-    """Raised when trying to revoke a used invite."""
-
-    def __init__(self):
-        super().__init__("Cannot revoke used invite")
-
-
 class InvalidRoleError(AdminError):
     """Raised when role is invalid."""
 
@@ -64,8 +41,31 @@ class InvalidRoleError(AdminError):
         super().__init__(f"Invalid role: {role}")
 
 
+class InviteAlreadyUsedError(AdminError):
+    """Raised when trying to revoke a used invite."""
+
+    def __init__(self):
+        super().__init__("Cannot revoke used invite")
+
+
 class InviteGenerationError(AdminError):
     """Raised when invite code generation fails."""
 
     def __init__(self):
         super().__init__("Failed to generate unique invite code")
+
+
+class InviteNotFoundError(AdminError):
+    """Raised when invite is not found."""
+
+    def __init__(self, code: str | None = None):
+        msg = f"Invite {code} not found" if code else "Invite not found"
+        super().__init__(msg)
+
+
+class UserNotFoundError(AdminError):
+    """Raised when user is not found."""
+
+    def __init__(self, user_id: str | None = None):
+        msg = f"User {user_id} not found" if user_id else "User not found"
+        super().__init__(msg)

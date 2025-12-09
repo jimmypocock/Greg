@@ -30,28 +30,21 @@ def get_database_url() -> str:
 
     Returns:
         PostgreSQL connection URL for asyncpg.
+
+    Raises:
+        RuntimeError: If DATABASE_URL is not set.
     """
-    import os
+    from src.config.validation import get_required
 
-    # Support both DATABASE_URL and individual components
-    database_url = os.environ.get("DATABASE_URL")
+    database_url = get_required("DATABASE_URL")
 
-    if database_url:
-        # Convert postgres:// to postgresql+asyncpg://
-        if database_url.startswith("postgres://"):
-            database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif database_url.startswith("postgresql://"):
-            database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return database_url
+    # Convert postgres:// to postgresql+asyncpg://
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-    # Build from components
-    host = os.environ.get("DB_HOST", "localhost")
-    port = os.environ.get("DB_PORT", "5432")
-    user = os.environ.get("DB_USER", "greg")
-    password = os.environ.get("DB_PASSWORD", "greg")
-    database = os.environ.get("DB_NAME", "greg")
-
-    return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{database}"
+    return database_url
 
 
 async def init_database(database_url: str | None = None) -> None:

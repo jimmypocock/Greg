@@ -5,8 +5,6 @@ Provides user management, authentication strategies, and route setup.
 """
 
 import logging
-import os
-import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -38,8 +36,11 @@ from src.database import Invite, User, UserRole, get_session_dependency
 
 # Constants
 
-ACCESS_TOKEN_EXPIRE_SECONDS = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "15")) * 60
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", secrets.token_urlsafe(32))
+from src.config import Config
+from src.config.validation import get_required
+
+ACCESS_TOKEN_EXPIRE_SECONDS = Config.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+SECRET_KEY = get_required("JWT_SECRET_KEY")
 
 logger = logging.getLogger(__name__)
 
