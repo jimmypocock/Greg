@@ -178,6 +178,20 @@ export interface AddSectionRequest {
   after_section_id?: string;
 }
 
+export interface ReorderSectionsRequest {
+  section_ids: string[];
+}
+
+export interface ReorderLinesRequest {
+  section_id: string;
+  line_ids: string[];
+}
+
+export interface DeleteLineRequest {
+  section_id: string;
+  line_id: string;
+}
+
 export interface ApplyStructureRequest {
   sections: SuggestionSection[];
 }

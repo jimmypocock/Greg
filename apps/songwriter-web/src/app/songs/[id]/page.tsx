@@ -1,15 +1,14 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine } from '@/lib/hooks';
-import { StatusBadge } from '@/components/StatusBadge';
-import { SectionEditor } from '@/components/SectionEditor';
-import { AgentReviewPanel } from '@/components/AgentReviewPanel';
-import { ReviewHistory } from '@/components/ReviewHistory';
-import { SongNotesPanel } from '@/components/SongNotesPanel';
-import { SongStatus, StructureSuggestion } from '@/types';
+import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines } from '@/lib/hooks';
+import { SplitPaneLayout } from '@/components/layout/SplitPaneLayout';
+import { ToolboxPanel } from '@/components/toolbox/ToolboxPanel';
+import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
+import { SongStatus, StructureSuggestion, SectionType } from '@/types';
+import { useUndoRedo } from '@/hooks/useUndoRedo';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -25,31 +24,163 @@ export default function SongPage({ params }: PageProps) {
   const applyStructure = useApplyStructure(resolvedParams.id);
   const updateLine = useUpdateLine(resolvedParams.id);
   const addLine = useAddLine(resolvedParams.id);
+  const addSection = useAddSection(resolvedParams.id);
+  const reorderSections = useReorderSections(resolvedParams.id);
+  const deleteLine = useDeleteLine(resolvedParams.id);
+  const deleteSectionMutation = useDeleteSection(resolvedParams.id);
+  const reorderLines = useReorderLines(resolvedParams.id);
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editKey, setEditKey] = useState('');
-  const [editTempo, setEditTempo] = useState('');
-  const [suggestion, setSuggestion] = useState<StructureSuggestion | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [suggestion, setSuggestion] = useState<StructureSuggestion | null>(null);
 
-  const handleEdit = () => {
-    if (song) {
-      setEditTitle(song.title);
-      setEditKey(song.key || '');
-      setEditTempo(song.tempo?.toString() || '');
-      setIsEditing(true);
+  // Undo/Redo support
+  const { pushAction, undo, redo, canUndo, canRedo, isPerformingAction } = useUndoRedo();
+
+  const handleUpdateSong = async (data: Parameters<typeof updateSong.mutateAsync>[0]) => {
+    await updateSong.mutateAsync(data);
+  };
+
+  const handleUpdateLine = useCallback(async (sectionId: string, lineId: string, text: string) => {
+    // Find the current line text for undo
+    const section = song?.sections.find(s => s.id === sectionId);
+    const line = section?.lines.find(l => l.id === lineId);
+    const previousText = line?.text || '';
+
+    await updateLine.mutateAsync({ section_id: sectionId, line_id: lineId, text });
+
+    // Only push to undo if text actually changed
+    if (previousText !== text) {
+      pushAction({
+        description: 'Edit line',
+        undo: async () => {
+          await updateLine.mutateAsync({ section_id: sectionId, line_id: lineId, text: previousText });
+        },
+        redo: async () => {
+          await updateLine.mutateAsync({ section_id: sectionId, line_id: lineId, text });
+        },
+      });
     }
-  };
+  }, [song, updateLine, pushAction]);
 
-  const handleSave = async () => {
-    await updateSong.mutateAsync({
-      title: editTitle || undefined,
-      key: editKey || undefined,
-      tempo: editTempo ? parseInt(editTempo, 10) : undefined,
+  const handleAddLine = useCallback(async (sectionId: string) => {
+    const result = await addLine.mutateAsync({ section_id: sectionId, text: '' });
+
+    // Find the newly added line (it should be the last one in the section)
+    const section = result.sections.find(s => s.id === sectionId);
+    const newLine = section?.lines[section.lines.length - 1];
+
+    if (newLine) {
+      pushAction({
+        description: 'Add line',
+        undo: async () => {
+          await deleteLine.mutateAsync({ section_id: sectionId, line_id: newLine.id });
+        },
+        redo: async () => {
+          await addLine.mutateAsync({ section_id: sectionId, text: '' });
+        },
+      });
+    }
+  }, [addLine, deleteLine, pushAction]);
+
+  const handleAddSection = useCallback(async () => {
+    const result = await addSection.mutateAsync({ type: SectionType.VERSE });
+
+    // Find the newly added section (it should be the last one)
+    const newSection = result.sections[result.sections.length - 1];
+
+    if (newSection) {
+      pushAction({
+        description: 'Add section',
+        undo: async () => {
+          await deleteSectionMutation.mutateAsync(newSection.id);
+        },
+        redo: async () => {
+          await addSection.mutateAsync({ type: SectionType.VERSE });
+        },
+      });
+    }
+  }, [addSection, deleteSectionMutation, pushAction]);
+
+  const handleReorderSections = useCallback(async (sectionIds: string[]) => {
+    // Store the previous order for undo
+    const previousOrder = song?.sections.map(s => s.id) || [];
+
+    await reorderSections.mutateAsync({ section_ids: sectionIds });
+
+    pushAction({
+      description: 'Reorder sections',
+      undo: async () => {
+        await reorderSections.mutateAsync({ section_ids: previousOrder });
+      },
+      redo: async () => {
+        await reorderSections.mutateAsync({ section_ids: sectionIds });
+      },
     });
-    setIsEditing(false);
-  };
+  }, [song, reorderSections, pushAction]);
+
+  const handleDeleteLine = useCallback(async (sectionId: string, lineId: string) => {
+    // Store the line data for potential restoration
+    const section = song?.sections.find(s => s.id === sectionId);
+    const line = section?.lines.find(l => l.id === lineId);
+    const lineText = line?.text || '';
+
+    await deleteLine.mutateAsync({ section_id: sectionId, line_id: lineId });
+
+    // Note: Undo for delete is limited - adds line at end, not original position
+    pushAction({
+      description: 'Delete line',
+      undo: async () => {
+        await addLine.mutateAsync({ section_id: sectionId, text: lineText });
+      },
+      redo: async () => {
+        // For redo, we can't delete the same line, so we just skip
+        // This is a limitation of the current API
+      },
+    });
+  }, [song, deleteLine, addLine, pushAction]);
+
+  const handleDeleteSection = useCallback(async (sectionId: string) => {
+    // Store section data for potential restoration
+    const section = song?.sections.find(s => s.id === sectionId);
+    const sectionType = section?.type || SectionType.VERSE;
+
+    await deleteSectionMutation.mutateAsync(sectionId);
+
+    // Clear selection if the deleted section was selected
+    if (selectedSectionId === sectionId) {
+      setSelectedSectionId(null);
+    }
+
+    // Note: Undo for delete section is limited - creates empty section, doesn't restore lines
+    pushAction({
+      description: 'Delete section',
+      undo: async () => {
+        await addSection.mutateAsync({ type: sectionType });
+      },
+      redo: async () => {
+        // For redo, we can't delete the same section
+      },
+    });
+  }, [song, deleteSectionMutation, addSection, selectedSectionId, pushAction]);
+
+  const handleReorderLines = useCallback(async (sectionId: string, lineIds: string[]) => {
+    // Store the previous order for undo
+    const section = song?.sections.find(s => s.id === sectionId);
+    const previousOrder = section?.lines.map(l => l.id) || [];
+
+    await reorderLines.mutateAsync({ section_id: sectionId, line_ids: lineIds });
+
+    pushAction({
+      description: 'Reorder lines',
+      undo: async () => {
+        await reorderLines.mutateAsync({ section_id: sectionId, line_ids: previousOrder });
+      },
+      redo: async () => {
+        await reorderLines.mutateAsync({ section_id: sectionId, line_ids: lineIds });
+      },
+    });
+  }, [song, reorderLines, pushAction]);
 
   const handleDelete = async () => {
     await deleteSong.mutateAsync(resolvedParams.id);
@@ -68,24 +199,12 @@ export default function SongPage({ params }: PageProps) {
     }
   };
 
-  const handleStatusChange = async (status: SongStatus) => {
-    await updateSong.mutateAsync({ status });
-  };
-
-  const handleUpdateLine = async (sectionId: string, lineId: string, text: string) => {
-    await updateLine.mutateAsync({ section_id: sectionId, line_id: lineId, text });
-  };
-
-  const handleAddLine = async (sectionId: string) => {
-    await addLine.mutateAsync({ section_id: sectionId, text: '' });
-  };
-
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading song...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">Loading song...</p>
         </div>
       </div>
     );
@@ -93,15 +212,21 @@ export default function SongPage({ params }: PageProps) {
 
   if (error || !song) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-5xl mx-auto px-4 py-8">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-red-800">Error loading song</h3>
-            <p className="mt-1 text-sm text-red-700">
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+        <div className="max-w-2xl mx-auto px-4 py-16">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+            <h3 className="text-lg font-medium text-red-800 dark:text-red-200">Error loading song</h3>
+            <p className="mt-2 text-sm text-red-700 dark:text-red-300">
               {error instanceof Error ? error.message : 'Song not found'}
             </p>
-            <Link href="/" className="mt-4 inline-block text-sm text-indigo-600 hover:text-indigo-500">
-              &larr; Back to songs
+            <Link
+              href="/"
+              className="mt-4 inline-flex items-center text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-500"
+            >
+              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to songs
             </Link>
           </div>
         </div>
@@ -110,252 +235,183 @@ export default function SongPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/" className="text-gray-500 hover:text-gray-700">
-                &larr;
-              </Link>
-              {isEditing ? (
-                <input
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="text-2xl font-bold text-gray-900 border-b-2 border-indigo-500 focus:outline-none"
-                />
-              ) : (
-                <h1 className="text-2xl font-bold text-gray-900">{song.title}</h1>
-              )}
-              <StatusBadge status={song.status} />
-            </div>
-            <div className="flex items-center gap-2">
-              {isEditing ? (
-                <>
-                  <button
-                    onClick={() => setIsEditing(false)}
-                    className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={updateSong.isPending}
-                    className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    Save
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handleEdit}
-                    className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="px-3 py-1.5 text-sm text-red-600 hover:text-red-800"
-                  >
-                    Delete
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Metadata */}
-          <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-500">
-            {isEditing ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="key">Key:</label>
-                  <input
-                    id="key"
-                    type="text"
-                    value={editKey}
-                    onChange={(e) => setEditKey(e.target.value)}
-                    placeholder="e.g., G major"
-                    className="w-24 px-2 py-1 border rounded text-sm"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="tempo">BPM:</label>
-                  <input
-                    id="tempo"
-                    type="number"
-                    value={editTempo}
-                    onChange={(e) => setEditTempo(e.target.value)}
-                    placeholder="120"
-                    className="w-20 px-2 py-1 border rounded text-sm"
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                {song.key && <span>Key: {song.key}</span>}
-                {song.tempo && <span>{song.tempo} BPM</span>}
-                {song.time_signature && <span>{song.time_signature}</span>}
-                {song.feel && <span>Feel: {song.feel}</span>}
-              </>
-            )}
-          </div>
-
-          {/* Status selector */}
-          <div className="mt-4">
-            <select
-              value={song.status}
-              onChange={(e) => handleStatusChange(e.target.value as SongStatus)}
-              className="text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+    <div className="h-screen bg-gray-100 dark:bg-gray-900 flex flex-col overflow-hidden">
+      {/* Header */}
+      <header className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 no-print">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
             >
-              <option value={SongStatus.IDEA}>Idea</option>
-              <option value={SongStatus.DRAFT}>Draft</option>
-              <option value={SongStatus.IN_PROGRESS}>In Progress</option>
-              <option value={SongStatus.REVIEW}>Review</option>
-              <option value={SongStatus.FINISHED}>Finished</option>
-            </select>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </Link>
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              Songwriter
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Undo/Redo buttons */}
+            <div className="flex items-center border-r border-gray-200 dark:border-gray-700 pr-2 mr-2">
+              <button
+                onClick={undo}
+                disabled={!canUndo || isPerformingAction}
+                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Undo (Cmd+Z)"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+              </button>
+              <button
+                onClick={redo}
+                disabled={!canRedo || isPerformingAction}
+                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Redo (Cmd+Shift+Z)"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                </svg>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+            >
+              Delete
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {/* AI Structure Suggestion */}
-        {song.raw_input && song.sections.length === 0 && (
-          <div className="mb-8 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-indigo-800">Unstructured lyrics detected</h3>
-            <p className="mt-1 text-sm text-indigo-700">
-              This song has raw lyrics but no sections. Would you like AI to suggest a structure?
-            </p>
+      {/* Structure Suggestion Banner */}
+      {song.raw_input && song.sections.length === 0 && !suggestion && (
+        <div className="flex-shrink-0 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800 px-4 py-3 no-print">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200">
+                Unstructured lyrics detected
+              </p>
+              <p className="text-xs text-indigo-600 dark:text-indigo-300 mt-0.5">
+                Let AI analyze and suggest a song structure
+              </p>
+            </div>
             <button
               onClick={handleSuggestStructure}
               disabled={suggestStructure.isPending}
-              className="mt-3 px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
               {suggestStructure.isPending ? 'Analyzing...' : 'Suggest Structure'}
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Structure Suggestion Modal */}
-        {suggestion && (
-          <div className="mb-8 bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-green-800">
-                  Structure Suggestion ({Math.round(suggestion.confidence * 100)}% confidence)
-                </h3>
-                {suggestion.reasoning && (
-                  <p className="mt-1 text-sm text-green-700">{suggestion.reasoning}</p>
-                )}
-              </div>
-              <button
-                onClick={() => setSuggestion(null)}
-                className="text-green-600 hover:text-green-800"
-              >
-                &times;
-              </button>
-            </div>
-            <div className="mt-4 space-y-2">
-              {suggestion.sections.map((section, i) => (
-                <div key={i} className="bg-white rounded p-2 text-sm">
-                  <span className="font-medium">
+      {/* Structure Suggestion Modal */}
+      {suggestion && (
+        <div className="flex-shrink-0 bg-green-50 dark:bg-green-900/20 border-b border-green-200 dark:border-green-800 px-4 py-3 no-print">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                Structure Suggestion ({Math.round(suggestion.confidence * 100)}% confidence)
+              </p>
+              {suggestion.reasoning && (
+                <p className="text-xs text-green-600 dark:text-green-300 mt-1">
+                  {suggestion.reasoning}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 mt-2">
+                {suggestion.sections.map((section, i) => (
+                  <span
+                    key={i}
+                    className="px-2 py-1 text-xs bg-white dark:bg-gray-800 rounded border border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
+                  >
                     {section.type}
                     {section.number && ` ${section.number}`}
+                    <span className="text-green-500 dark:text-green-400 ml-1">
+                      ({section.lines.length})
+                    </span>
                   </span>
-                  <span className="text-gray-500 ml-2">
-                    ({section.lines.length} lines)
-                  </span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={handleApplyStructure}
-                disabled={applyStructure.isPending}
-                className="px-4 py-2 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-              >
-                {applyStructure.isPending ? 'Applying...' : 'Apply Structure'}
-              </button>
+            <div className="flex items-center gap-2 ml-4">
               <button
                 onClick={() => setSuggestion(null)}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               >
                 Dismiss
               </button>
+              <button
+                onClick={handleApplyStructure}
+                disabled={applyStructure.isPending}
+                className="px-4 py-1.5 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {applyStructure.isPending ? 'Applying...' : 'Apply'}
+              </button>
             </div>
           </div>
-        )}
-
-        {/* Sections */}
-        {song.sections.length > 0 ? (
-          <div className="space-y-4">
-            <h2 className="text-lg font-medium text-gray-900">
-              Sections ({song.sections.length})
-            </h2>
-            {song.sections.map((section) => (
-              <SectionEditor
-                key={section.id}
-                section={section}
-                onUpdateLine={handleUpdateLine}
-                onAddLine={handleAddLine}
-              />
-            ))}
-          </div>
-        ) : song.raw_input ? (
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Raw Lyrics</h3>
-            <pre className="whitespace-pre-wrap font-mono text-sm text-gray-600">
-              {song.raw_input}
-            </pre>
-          </div>
-        ) : (
-          <div className="text-center py-12 text-gray-500">
-            <p>This song has no content yet.</p>
-          </div>
-        )}
-
-        {/* AI Review Section */}
-        <div className="mt-8 space-y-4">
-          <h2 className="text-lg font-medium text-gray-900">AI Critic</h2>
-          <AgentReviewPanel songId={resolvedParams.id} hasSections={song.sections.length > 0} />
-          <ReviewHistory songId={resolvedParams.id} />
         </div>
+      )}
 
-        {/* Brain Dump / Notes */}
-        <div className="mt-8">
-          <SongNotesPanel songId={resolvedParams.id} />
-        </div>
-
-        {/* Quick Notes (legacy) */}
-        {song.notes && (
-          <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-yellow-800">Quick Notes</h3>
-            <p className="mt-1 text-sm text-yellow-700 whitespace-pre-wrap">{song.notes}</p>
-          </div>
-        )}
-      </main>
+      {/* Main Split Pane Layout */}
+      <SplitPaneLayout
+        leftPanel={
+          <ToolboxPanel
+            song={song}
+            selectedSectionId={selectedSectionId}
+            onSelectSection={setSelectedSectionId}
+            onUpdateSong={handleUpdateSong}
+            onUpdateLine={handleUpdateLine}
+            onAddLine={handleAddLine}
+            onDeleteLine={handleDeleteLine}
+            onDeleteSection={handleDeleteSection}
+            onReorderSections={handleReorderSections}
+            onReorderLines={handleReorderLines}
+            onAddSection={handleAddSection}
+            isUpdating={updateSong.isPending}
+            isMutating={
+              addLine.isPending ||
+              deleteLine.isPending ||
+              updateLine.isPending ||
+              reorderSections.isPending ||
+              deleteSectionMutation.isPending ||
+              reorderLines.isPending
+            }
+          />
+        }
+        rightPanel={
+          <LivePreviewPanel
+            song={song}
+            selectedSectionId={selectedSectionId}
+            onSectionClick={setSelectedSectionId}
+          />
+        }
+      />
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
-            <h3 className="text-lg font-medium text-gray-900">Delete Song</h3>
-            <p className="mt-2 text-sm text-gray-500">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 no-print">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-sm mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Delete Song
+            </h3>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
               Are you sure you want to delete &quot;{song.title}&quot;? This action cannot be undone.
             </p>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleteSong.isPending}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
                 {deleteSong.isPending ? 'Deleting...' : 'Delete'}
               </button>

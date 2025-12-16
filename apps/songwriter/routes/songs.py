@@ -664,7 +664,167 @@ async def add_section(
 
     await store.add_section(song_id, new_section)
 
-    # TODO: Handle after_section_id for insertion ordering if needed
+    song = await store.get(song_id)
+    return SongResponse.from_song(song)
+
+
+class ReorderSectionsRequest(BaseModel):
+    """Request to reorder sections."""
+
+    section_ids: list[UUID] = Field(..., description="Section IDs in the new order")
+
+
+@router.put("/{song_id}/sections/reorder", response_model=SongResponse)
+async def reorder_sections(
+    song_id: UUID,
+    request: ReorderSectionsRequest,
+    store: Annotated[SongDBStore, Depends(get_db_store)],
+):
+    """Reorder sections in a song."""
+    song = await store.get(song_id)
+
+    if not song:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Song not found: {song_id}",
+        )
+
+    # Verify all section IDs belong to this song
+    song_section_ids = {s.id for s in song.sections}
+    if set(request.section_ids) != song_section_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Section IDs don't match the song's sections",
+        )
+
+    # Update order for each section
+    for new_order, section_id in enumerate(request.section_ids):
+        await store.update_section(section_id, {"order": new_order})
 
     song = await store.get(song_id)
+    logger.info(f"Reordered sections in song: {song.title}")
+    return SongResponse.from_song(song)
+
+
+class DeleteLineRequest(BaseModel):
+    """Request to delete a line."""
+
+    section_id: UUID
+    line_id: UUID
+
+
+@router.delete("/{song_id}/lines", response_model=SongResponse)
+async def delete_line(
+    song_id: UUID,
+    request: DeleteLineRequest,
+    store: Annotated[SongDBStore, Depends(get_db_store)],
+):
+    """Delete a line from a section."""
+    song = await store.get(song_id)
+
+    if not song:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Song not found: {song_id}",
+        )
+
+    # Verify section and line belong to this song
+    for section in song.sections:
+        if section.id == request.section_id:
+            for line in section.lines:
+                if line.id == request.line_id:
+                    await store.delete_line(request.line_id)
+                    song = await store.get(song_id)
+                    return SongResponse.from_song(song)
+
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Line not found: {request.line_id}",
+            )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Section not found: {request.section_id}",
+    )
+
+
+class ReorderLinesRequest(BaseModel):
+    """Request to reorder lines within a section."""
+
+    section_id: UUID
+    line_ids: list[UUID] = Field(..., description="Line IDs in the new order")
+
+
+@router.put("/{song_id}/lines/reorder", response_model=SongResponse)
+async def reorder_lines(
+    song_id: UUID,
+    request: ReorderLinesRequest,
+    store: Annotated[SongDBStore, Depends(get_db_store)],
+):
+    """Reorder lines within a section."""
+    song = await store.get(song_id)
+
+    if not song:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Song not found: {song_id}",
+        )
+
+    # Find the section
+    section = next(
+        (s for s in song.sections if s.id == request.section_id),
+        None
+    )
+    if not section:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Section not found: {request.section_id}",
+        )
+
+    # Verify all line IDs belong to this section
+    section_line_ids = {line.id for line in section.lines}
+    if set(request.line_ids) != section_line_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Line IDs don't match the section's lines",
+        )
+
+    # Update order for each line
+    for new_order, line_id in enumerate(request.line_ids):
+        await store.update_line(line_id, {"order": new_order})
+
+    song = await store.get(song_id)
+    logger.info(f"Reordered lines in section of song: {song.title}")
+    return SongResponse.from_song(song)
+
+
+@router.delete("/{song_id}/sections/{section_id}", response_model=SongResponse)
+async def delete_section(
+    song_id: UUID,
+    section_id: UUID,
+    store: Annotated[SongDBStore, Depends(get_db_store)],
+):
+    """Delete a section from a song."""
+    song = await store.get(song_id)
+
+    if not song:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Song not found: {song_id}",
+        )
+
+    # Verify section belongs to this song
+    section = next(
+        (s for s in song.sections if s.id == section_id),
+        None
+    )
+    if not section:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Section not found: {section_id}",
+        )
+
+    await store.delete_section(section_id)
+    song = await store.get(song_id)
+    logger.info(f"Deleted section from song: {song.title}")
     return SongResponse.from_song(song)

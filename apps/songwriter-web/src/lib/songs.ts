@@ -14,6 +14,8 @@ import {
   AddLineRequest,
   UpdateLineRequest,
   AddSectionRequest,
+  ReorderSectionsRequest,
+  DeleteLineRequest,
   ApplyStructureRequest,
   StructureSuggestion,
   SongNote,
@@ -87,6 +89,26 @@ export async function updateLine(id: string, data: UpdateLineRequest): Promise<S
 // Add a new section
 export async function addSection(id: string, data: AddSectionRequest): Promise<Song> {
   return post<Song, AddSectionRequest>(`/songs/${id}/sections`, data);
+}
+
+// Reorder sections
+export async function reorderSections(id: string, data: ReorderSectionsRequest): Promise<Song> {
+  return put<Song, ReorderSectionsRequest>(`/songs/${id}/sections/reorder`, data);
+}
+
+// Delete a line
+export async function deleteLine(id: string, data: DeleteLineRequest): Promise<Song> {
+  return del<Song>(`/songs/${id}/lines`, data);
+}
+
+// Delete a section
+export async function deleteSection(id: string, sectionId: string): Promise<Song> {
+  return del<Song>(`/songs/${id}/sections/${sectionId}`);
+}
+
+// Reorder lines within a section
+export async function reorderLines(id: string, data: { section_id: string; line_ids: string[] }): Promise<Song> {
+  return put<Song, { section_id: string; line_ids: string[] }>(`/songs/${id}/lines/reorder`, data);
 }
 
 // Get chord sheet (text format)

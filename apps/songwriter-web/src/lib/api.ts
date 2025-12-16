@@ -57,15 +57,22 @@ export async function put<T, B>(path: string, body: B): Promise<T> {
   return handleResponse<T>(response);
 }
 
-export async function del(path: string): Promise<void> {
+export async function del<T = void>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) {
     const text = await response.text();
     throw new ApiError(response.status, text);
   }
+  // If there's content, parse it
+  const text = await response.text();
+  if (text) {
+    return JSON.parse(text) as T;
+  }
+  return undefined as T;
 }

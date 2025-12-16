@@ -16,6 +16,10 @@ import {
   addLine,
   updateLine,
   addSection,
+  reorderSections,
+  deleteLine,
+  deleteSection,
+  reorderLines,
 } from './songs';
 import {
   SongCreateRequest,
@@ -24,6 +28,8 @@ import {
   AddLineRequest,
   UpdateLineRequest,
   AddSectionRequest,
+  ReorderSectionsRequest,
+  DeleteLineRequest,
   ApplyStructureRequest,
 } from '@/types';
 
@@ -138,8 +144,8 @@ export function useAddLine(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: AddLineRequest) => addLine(id, data),
-    onSuccess: (song) => {
-      queryClient.setQueryData(songKeys.detail(id), song);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: songKeys.detail(id) });
     },
   });
 }
@@ -149,8 +155,8 @@ export function useUpdateLine(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: UpdateLineRequest) => updateLine(id, data),
-    onSuccess: (song) => {
-      queryClient.setQueryData(songKeys.detail(id), song);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: songKeys.detail(id) });
     },
   });
 }
@@ -163,6 +169,51 @@ export function useAddSection(id: string) {
     onSuccess: (song) => {
       queryClient.setQueryData(songKeys.detail(id), song);
       queryClient.invalidateQueries({ queryKey: songKeys.lists() });
+    },
+  });
+}
+
+// Reorder sections
+export function useReorderSections(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ReorderSectionsRequest) => reorderSections(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: songKeys.detail(id) });
+    },
+  });
+}
+
+// Delete line
+export function useDeleteLine(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: DeleteLineRequest) => deleteLine(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: songKeys.detail(id) });
+    },
+  });
+}
+
+// Delete section
+export function useDeleteSection(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sectionId: string) => deleteSection(id, sectionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: songKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: songKeys.lists() });
+    },
+  });
+}
+
+// Reorder lines within a section
+export function useReorderLines(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { section_id: string; line_ids: string[] }) => reorderLines(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: songKeys.detail(id) });
     },
   });
 }

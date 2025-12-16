@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --background: #f9fafb;
   --foreground: #171717;
+  --panel-bg: #ffffff;
+  --panel-border: #e5e7eb;
+  --section-header-bg: #f3f4f6;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
 }
 
 @theme inline {
@@ -14,15 +21,64 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #111827;
+    --foreground: #f9fafb;
+    --panel-bg: #1f2937;
+    --panel-border: #374151;
+    --section-header-bg: #111827;
+    --text-primary: #f9fafb;
+    --text-secondary: #9ca3af;
+    --accent: #818cf8;
+    --accent-hover: #a5b4fc;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Split pane layout */
+.split-pane-container {
+  display: flex;
+  height: calc(100vh - 64px);
+  overflow: hidden;
+}
+
+/* Smooth scrolling for chord sheet */
+.chord-sheet {
+  scroll-behavior: smooth;
+}
+
+/* Print styles for chord sheet */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
+
+  .chord-sheet {
+    padding: 20px;
+  }
+
+  .chord-sheet h1 {
+    font-size: 24px;
+    margin-bottom: 16px;
+  }
+
+  .section-block {
+    page-break-inside: avoid;
+    margin-bottom: 24px;
+  }
 }
 
 /* Agent progress animation */
