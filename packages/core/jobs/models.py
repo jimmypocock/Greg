@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from uuid import UUID
 
 
 class JobStatus(str, Enum):
@@ -26,6 +27,7 @@ class JobType(str, Enum):
     DOCUMENT_UPLOAD = "document_upload"
     DOCUMENT_PROCESS = "document_process"
     URL_PROCESS = "url_process"
+    AGENT_TASK = "agent_task"
 
 
 @dataclass
@@ -44,6 +46,7 @@ class JobInfo:
 
     job_id: str
     job_type: JobType
+    user_id: UUID
     status: JobStatus = JobStatus.PENDING
     progress: JobProgress | None = None
     result: dict[str, Any] | None = None
@@ -57,6 +60,7 @@ class JobInfo:
         return {
             "job_id": self.job_id,
             "job_type": self.job_type.value,
+            "user_id": str(self.user_id),
             "status": self.status.value,
             "progress": {
                 "stage": self.progress.stage,

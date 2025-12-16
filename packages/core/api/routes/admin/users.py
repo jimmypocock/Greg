@@ -11,7 +11,7 @@ Endpoints:
 """
 
 import logging
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.core.admin import (
     MessageResponse,
+    UserDetail,
     UserListResponse,
     UserResponse,
     UserService,
@@ -26,6 +27,9 @@ from packages.core.admin import (
 )
 from packages.core.auth import AdminUser
 from packages.core.database import get_session_dependency
+
+if TYPE_CHECKING:
+    from packages.core.database import User
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +44,21 @@ async def get_user_service(
 ) -> UserService:
     """Get user service with session."""
     return UserService(session=session)
+
+
+# Private functions
+
+
+def _user_to_detail(user: "User") -> UserDetail:
+    """Convert User model to UserDetail response."""
+    return UserDetail(
+        id=user.id,
+        email=user.email,
+        role=user.role.value,
+        is_active=user.is_active,
+        is_verified=user.is_verified,
+        created_at=user.created_at,
+    )
 
 
 # Routes
@@ -58,7 +77,7 @@ async def list_users(
     users, total = await service.list(skip, limit, is_active, role)
 
     return UserListResponse(
-        users=[user.to_dict() for user in users],
+        users=[_user_to_detail(user) for user in users],
         total=total,
     )
 
@@ -72,7 +91,7 @@ async def get_user(
     """Get user details."""
     user = await service.get(user_id)
 
-    return UserResponse(user=user.to_dict())
+    return UserResponse(user=_user_to_detail(user))
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
@@ -85,9 +104,7 @@ async def update_user(
     """Update user role or active status."""
     user = await service.update(user_id, admin.id, request)
 
-    logger.info(f"Admin {admin.email} updated user {user.email}")
-
-    return UserResponse(user=user.to_dict())
+    return UserResponse(user=_user_to_detail(user))
 
 
 @router.delete("/{user_id}", response_model=MessageResponse)
@@ -98,7 +115,5 @@ async def delete_user(
 ):
     """Delete a user."""
     email = await service.delete(user_id, admin.id)
-
-    logger.info(f"Admin {admin.email} deleted user {email}")
 
     return MessageResponse(message=f"User {email} deleted")

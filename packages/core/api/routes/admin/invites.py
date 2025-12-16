@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.core.admin import (
     InviteCreateRequest,
+    InviteDetail,
     InviteListResponse,
     InviteResponse,
     InviteService,
@@ -56,7 +57,19 @@ async def list_invites(
     invites, total = await service.list(skip, limit, active, used)
 
     return InviteListResponse(
-        invites=[invite.to_dict() for invite in invites],
+        invites=[
+            InviteDetail(
+                code=invite.code,
+                email=invite.email,
+                is_active=invite.is_active,
+                created_at=invite.created_at,
+                expires_at=invite.expires_at,
+                used_at=invite.used_at,
+                used_by=invite.used_by,
+                created_by=invite.created_by,
+            )
+            for invite in invites
+        ],
         total=total,
     )
 
@@ -70,25 +83,28 @@ async def create_invite(
     """Create a new invite code."""
     invite = await service.create(admin.id, request)
 
-    logger.info(f"Admin {admin.email} created invite {invite.code}")
-
     return InviteResponse(
-        code=invite.code,
+        invite=InviteDetail(
+            code=invite.code,
+            email=invite.email,
+            is_active=invite.is_active,
+            created_at=invite.created_at,
+            expires_at=invite.expires_at,
+            used_at=invite.used_at,
+            used_by=invite.used_by,
+            created_by=invite.created_by,
+        ),
         signup_url=f"/auth/signup?invite={invite.code}",
-        email=request.email,
-        expires_at=invite.expires_at.isoformat() if invite.expires_at else None,
     )
 
 
 @router.delete("/{code}", response_model=MessageResponse)
-async def delete_invite(
+async def revoke_invite(
     code: str,
     admin: AdminUser,
     service: Annotated[InviteService, Depends(get_invite_service)],
 ):
     """Revoke an invite code."""
-    await service.delete(code)
-
-    logger.info(f"Admin {admin.email} revoked invite {code}")
+    await service.revoke(code, admin.id)
 
     return MessageResponse(message=f"Invite {code} revoked")

@@ -13,6 +13,7 @@ For in-memory processing (development):
 """
 
 from packages.core.jobs.exceptions import (
+    JobAccessDeniedError,
     JobCannotBeCancelledError,
     JobCancellationError,
     JobError,
@@ -37,6 +38,7 @@ from packages.core.jobs.schemas import (
 
 __all__ = [
     # Exceptions
+    "JobAccessDeniedError",
     "JobCannotBeCancelledError",
     "JobCancellationError",
     "JobError",

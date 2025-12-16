@@ -60,6 +60,7 @@ class JobResponse(BaseModel):
     result: dict | None
     started_at: str | None
     status: str
+    user_id: str
 
     @classmethod
     def from_model(cls, job: "JobInfo") -> "JobResponse":
@@ -77,6 +78,7 @@ class JobResponse(BaseModel):
             result=job_dict["result"],
             started_at=job_dict["started_at"],
             status=job_dict["status"],
+            user_id=job_dict["user_id"],
         )
 
 

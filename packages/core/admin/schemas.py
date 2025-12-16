@@ -4,10 +4,14 @@ Pydantic schemas for admin management.
 Defines request/response schemas for admin endpoints.
 """
 
+from datetime import datetime
+from uuid import UUID
+
 from pydantic import BaseModel, EmailStr
 
 
-# Schemas
+# Request schemas
+
 
 class InviteCreateRequest(BaseModel):
     """Invite creation request body."""
@@ -16,43 +20,68 @@ class InviteCreateRequest(BaseModel):
     expires_in_days: int | None = 7
 
 
-class InviteListResponse(BaseModel):
-    """Invite list response."""
+class UserUpdateRequest(BaseModel):
+    """User update request body."""
 
-    invites: list[dict]
-    total: int
+    is_active: bool | None = None
+    role: str | None = None
 
 
-class InviteResponse(BaseModel):
-    """Single invite response."""
+# Response schemas
+
+
+class InviteDetail(BaseModel):
+    """Invite details for API responses."""
 
     code: str
     email: str | None
-    expires_at: str | None
-    signup_url: str
+    is_active: bool
+    created_at: datetime
+    expires_at: datetime | None
+    used_at: datetime | None
+    used_by: UUID | None
+    created_by: UUID
+
+
+class InviteResponse(BaseModel):
+    """Single invite response with signup URL."""
+
+    invite: InviteDetail
+    signup_url: str | None = None
+
+
+class InviteListResponse(BaseModel):
+    """Paginated invite list response."""
+
+    invites: list[InviteDetail]
+    total: int
+
+
+class UserDetail(BaseModel):
+    """User details for API responses."""
+
+    id: UUID
+    email: str
+    role: str
+    is_active: bool
+    is_verified: bool
+    created_at: datetime
+
+
+class UserResponse(BaseModel):
+    """Single user response."""
+
+    user: UserDetail
+
+
+class UserListResponse(BaseModel):
+    """Paginated user list response."""
+
+    users: list[UserDetail]
+    total: int
 
 
 class MessageResponse(BaseModel):
     """Simple message response."""
 
     message: str
-
-
-class UserListResponse(BaseModel):
-    """User list response."""
-
-    total: int
-    users: list[dict]
-
-
-class UserResponse(BaseModel):
-    """Single user response."""
-
-    user: dict
-
-
-class UserUpdateRequest(BaseModel):
-    """User update request body."""
-
-    is_active: bool | None = None
-    role: str | None = None

@@ -33,3 +33,11 @@ class JobCancellationError(JobError):
 
     def __init__(self):
         super().__init__("Failed to cancel job")
+
+
+class JobAccessDeniedError(JobError):
+    """Raised when user tries to access a job they don't own."""
+
+    def __init__(self, job_id: str | None = None):
+        msg = f"Access denied to job {job_id}" if job_id else "Access denied to job"
+        super().__init__(msg)

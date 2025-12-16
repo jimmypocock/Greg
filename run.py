@@ -4,7 +4,8 @@ Greg CLI Runner
 
 Commands:
     dev         Start infrastructure, run migrations, and start API server
-    server      Start the API server only
+    server      Start the Writer API server (port 8080)
+    songwriter  Start the Songwriter API server (port 8081)
     worker      Start the ARQ background worker
     infra       Start PostgreSQL and Redis (docker-compose)
     infra-stop  Stop infrastructure containers
@@ -16,7 +17,8 @@ Commands:
 
 Examples:
     greg dev              # Full development environment
-    greg server           # Just the API server
+    greg server           # Writer app (port 8080)
+    greg songwriter       # Songwriter app (port 8081)
     greg worker           # Just the background worker
     greg test             # Run test suite
     greg test -k "test_auth"  # Run specific tests
@@ -164,10 +166,17 @@ def cmd_migrate():
 
 
 def cmd_server():
-    """Start the API server."""
+    """Start the API server (writer app)."""
     print("Starting Greg API server...")
     print("API docs at: http://localhost:8080/docs")
     run_cmd(["uv", "run", "python", "main.py"])
+
+
+def cmd_songwriter():
+    """Start the Songwriter app."""
+    print("Starting Songwriter API server...")
+    print("API docs at: http://localhost:8081/docs")
+    run_cmd(["uv", "run", "uvicorn", "apps.songwriter.app:app", "--port", "8081", "--reload"])
 
 
 def cmd_worker():
@@ -321,6 +330,8 @@ def main():
         # Individual services
         "server": cmd_server,
         "api": cmd_server,  # Alias
+        "writer": cmd_server,  # Alias
+        "songwriter": cmd_songwriter,
         "worker": cmd_worker,
 
         # Infrastructure

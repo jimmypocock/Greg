@@ -23,35 +23,38 @@ from packages.core.llm import (
     RecommendedModel,
 )
 
+# Recommended models for each provider.
+# NOTE: These should be reviewed periodically as providers release new models.
+# Last updated: 2025-01
 RECOMMENDED_MODELS = {
     "anthropic": [
         RecommendedModel(
-            name="claude-sonnet-4-5-20250929",
-            description="Primary - highest quality",
+            name="claude-sonnet-4-5-20250514",
+            description="Primary - best balance of quality and speed",
         ),
         RecommendedModel(
-            name="claude-haiku-4-5-20251015",
+            name="claude-haiku-4-5-20250514",
             description="Budget - fast and cost-effective",
         ),
     ],
     "google": [
         RecommendedModel(
-            name="gemini-2.5-flash",
-            description="Primary - production ready",
+            name="gemini-2.0-flash",
+            description="Primary - fast and capable",
         ),
         RecommendedModel(
-            name="gemini-2.5-flash-lite",
-            description="Budget - fastest, lowest cost",
+            name="gemini-1.5-flash",
+            description="Budget - reliable and cost-effective",
         ),
     ],
     "openai": [
         RecommendedModel(
-            name="gpt-5.1",
-            description="Primary - best with caching",
+            name="gpt-4o",
+            description="Primary - best quality",
         ),
         RecommendedModel(
-            name="gpt-5-mini",
-            description="Budget option",
+            name="gpt-4o-mini",
+            description="Budget - fast and affordable",
         ),
     ],
 }
@@ -109,7 +112,10 @@ def _get_ollama_provider() -> ProviderInfo:
         models = []
 
         for model in response.models:
-            size_bytes = model.get("size", 0)
+            # Ollama returns model objects with attributes, not dicts
+            size_bytes = getattr(model, "size", 0) or 0
+            model_name = getattr(model, "model", None) or getattr(model, "name", "unknown")
+
             if size_bytes > 1024**3:
                 size = f"{size_bytes / (1024**3):.1f}GB"
             elif size_bytes > 1024**2:
@@ -119,7 +125,7 @@ def _get_ollama_provider() -> ProviderInfo:
 
             models.append(
                 ModelInfo(
-                    name=model.get("model", "unknown"),
+                    name=model_name,
                     size=size,
                 )
             )

@@ -19,9 +19,11 @@ from packages.core.admin.handlers import register_admin_exception_handlers
 from packages.core.admin.invite_service import InviteService
 from packages.core.admin.schemas import (
     InviteCreateRequest,
+    InviteDetail,
     InviteListResponse,
     InviteResponse,
     MessageResponse,
+    UserDetail,
     UserListResponse,
     UserResponse,
     UserUpdateRequest,
@@ -43,9 +45,11 @@ __all__ = [
     "register_admin_exception_handlers",
     # Schemas
     "InviteCreateRequest",
+    "InviteDetail",
     "InviteListResponse",
     "InviteResponse",
     "MessageResponse",
+    "UserDetail",
     "UserListResponse",
     "UserResponse",
     "UserUpdateRequest",

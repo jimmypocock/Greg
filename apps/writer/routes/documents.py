@@ -109,7 +109,7 @@ async def process_url(
         api_key_id=auth.api_key_id,
     )
 
-    job = await job_manager.create_job(JobType.URL_PROCESS)
+    job = await job_manager.create_job(JobType.URL_PROCESS, auth.user.id)
 
     from apps.writer.jobs.document_worker import process_url_job
 
@@ -148,7 +148,7 @@ async def upload_document(
         api_key_id=auth.api_key_id,
     )
 
-    job = await job_manager.create_job(JobType.DOCUMENT_UPLOAD)
+    job = await job_manager.create_job(JobType.DOCUMENT_UPLOAD, auth.user.id)
 
     from apps.writer.jobs.document_worker import process_document_job
 

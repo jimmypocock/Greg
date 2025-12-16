@@ -7,9 +7,10 @@ Uses an in-memory store suitable for single-instance deployments.
 
 import asyncio
 import logging
-import uuid
+import uuid as uuid_lib
 from datetime import datetime
 from typing import Any, Callable, Coroutine
+from uuid import UUID
 
 from packages.core.jobs.models import JobInfo, JobProgress, JobStatus, JobType
 
@@ -29,23 +30,24 @@ class JobManager:
         self._subscribers: dict[str, list[Callable[[JobInfo], Coroutine]]] = {}
         self._lock = asyncio.Lock()
 
-    async def create_job(self, job_type: JobType) -> JobInfo:
+    async def create_job(self, job_type: JobType, user_id: UUID) -> JobInfo:
         """
         Create a new job and return its info.
 
         Args:
             job_type: The type of job being created.
+            user_id: The ID of the user creating the job.
 
         Returns:
             JobInfo with a unique job_id.
         """
-        job_id = str(uuid.uuid4())
-        job = JobInfo(job_id=job_id, job_type=job_type)
+        job_id = str(uuid_lib.uuid4())
+        job = JobInfo(job_id=job_id, job_type=job_type, user_id=user_id)
 
         async with self._lock:
             self._jobs[job_id] = job
 
-        logger.info(f"Created job {job_id} of type {job_type.value}")
+        logger.info(f"Created job {job_id} of type {job_type.value} for user {user_id}")
         return job
 
     async def get_job(self, job_id: str) -> JobInfo | None:
@@ -242,6 +244,7 @@ class JobManager:
         self,
         status: JobStatus | None = None,
         job_type: JobType | None = None,
+        user_id: UUID | None = None,
         limit: int = 50,
     ) -> list[JobInfo]:
         """
@@ -250,6 +253,7 @@ class JobManager:
         Args:
             status: Filter by job status.
             job_type: Filter by job type.
+            user_id: Filter by user who created the job.
             limit: Maximum number of jobs to return.
 
         Returns:
@@ -262,6 +266,8 @@ class JobManager:
             jobs = [j for j in jobs if j.status == status]
         if job_type:
             jobs = [j for j in jobs if j.job_type == job_type]
+        if user_id:
+            jobs = [j for j in jobs if j.user_id == user_id]
 
         jobs.sort(key=lambda j: j.created_at, reverse=True)
         return jobs[:limit]
