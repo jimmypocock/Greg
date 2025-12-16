@@ -12,6 +12,9 @@ class AgentTaskType(str, Enum):
     CHECK_CLICHES = "check_cliches"
     ANALYZE_RHYTHM = "analyze_rhythm"
 
+    # Structure tasks
+    STRUCTURE_ANALYSIS = "structure_analysis"
+
     # Lyricist tasks (future)
     WRITE_SECTION = "write_section"
     SUGGEST_LYRICS = "suggest_lyrics"

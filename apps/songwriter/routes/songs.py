@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.songwriter.enums import SectionType, SongStatus
+from apps.songwriter.enums import AgentTaskType, AgentType, SectionType, SongStatus
 from apps.songwriter.models import (
     AddChordRequest,
     ChordPlacement,
@@ -36,6 +36,7 @@ from apps.songwriter.models import (
 )
 from apps.songwriter.services import get_structure_service, parse_markdown
 from apps.songwriter.services.db_store import SongDBStore
+from apps.songwriter.services.agent_review_store import AgentReviewStore
 from packages.core.database import get_session_dependency
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,14 @@ async def get_db_store(
 ) -> SongDBStore:
     """Get a database-backed song store."""
     return SongDBStore(session)
+
+
+# Dependency for getting a review store
+async def get_review_store(
+    session: Annotated[AsyncSession, Depends(get_session_dependency)]
+) -> AgentReviewStore:
+    """Get an agent review store."""
+    return AgentReviewStore(session)
 
 
 # Response models
@@ -379,11 +388,13 @@ async def delete_song(
 async def suggest_structure(
     song_id: UUID,
     store: Annotated[SongDBStore, Depends(get_db_store)],
+    review_store: Annotated[AgentReviewStore, Depends(get_review_store)],
 ):
     """
     Get AI-suggested structure for a song's raw input.
 
     Does not modify the song - returns a suggestion that can be applied separately.
+    Also saves the analysis to review history.
     """
     song = await store.get(song_id)
 
@@ -401,6 +412,30 @@ async def suggest_structure(
 
     structure_service = get_structure_service()
     suggestion = await structure_service.suggest_structure(song.raw_input)
+
+    # Build a formatted result for review history
+    section_summary = ", ".join(
+        f"{s.type.value}{' ' + str(s.number) if s.number else ''} ({len(s.lines)} lines)"
+        for s in suggestion.sections
+    )
+    review_result = f"""## Structure Analysis
+
+**Confidence:** {suggestion.confidence:.0%}
+
+**Suggested Structure:** {section_summary}
+
+**Reasoning:** {suggestion.reasoning or 'No reasoning provided.'}"""
+
+    # Save to review history
+    await review_store.create(
+        song_id=song_id,
+        agent_type=AgentType.STRUCTURE,
+        task_type=AgentTaskType.STRUCTURE_ANALYSIS,
+        result=review_result,
+        input_tokens=0,  # Not tracked for this simple call
+        output_tokens=0,
+        success=True,
+    )
 
     logger.info(f"Generated structure suggestion for song: {song.title} (confidence: {suggestion.confidence})")
 
@@ -674,6 +709,8 @@ class ReorderSectionsRequest(BaseModel):
     section_ids: list[UUID] = Field(..., description="Section IDs in the new order")
 
 
+# NOTE: This route MUST come before /{song_id}/sections/{section_id} to avoid
+# "reorder" being matched as a section_id
 @router.put("/{song_id}/sections/reorder", response_model=SongResponse)
 async def reorder_sections(
     song_id: UUID,
@@ -703,6 +740,52 @@ async def reorder_sections(
 
     song = await store.get(song_id)
     logger.info(f"Reordered sections in song: {song.title}")
+    return SongResponse.from_song(song)
+
+
+class UpdateSectionRequest(BaseModel):
+    """Request to update a section."""
+
+    type: SectionType | None = Field(None, description="New section type")
+    number: int | None = Field(None, description="New section number")
+
+
+@router.put("/{song_id}/sections/{section_id}", response_model=SongResponse)
+async def update_section(
+    song_id: UUID,
+    section_id: UUID,
+    request: UpdateSectionRequest,
+    store: Annotated[SongDBStore, Depends(get_db_store)],
+):
+    """Update a section's type or number."""
+    song = await store.get(song_id)
+
+    if not song:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Song not found: {song_id}",
+        )
+
+    # Verify section belongs to this song
+    section = next((s for s in song.sections if s.id == section_id), None)
+    if not section:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Section not found: {section_id}",
+        )
+
+    # Build update dict with only provided fields
+    updates = {}
+    if request.type is not None:
+        updates["type"] = request.type
+    if request.number is not None:
+        updates["number"] = request.number
+
+    if updates:
+        await store.update_section(section_id, updates)
+        logger.info(f"Updated section {section_id} in song: {song.title}")
+
+    song = await store.get(song_id)
     return SongResponse.from_song(song)
 
 

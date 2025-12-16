@@ -1,6 +1,6 @@
 'use client';
 
-import { Song, SongUpdateRequest } from '@/types';
+import { Song, SongUpdateRequest, SectionType } from '@/types';
 import { CollapsibleSection } from '@/components/layout/CollapsibleSection';
 import { MetadataEditor } from './MetadataEditor';
 import { SectionNavigator } from './SectionNavigator';
@@ -14,8 +14,10 @@ interface ToolboxPanelProps {
   onUpdateSong: (data: SongUpdateRequest) => Promise<void>;
   onUpdateLine: (sectionId: string, lineId: string, text: string) => Promise<void>;
   onAddLine: (sectionId: string) => Promise<void>;
+  onAddLineWithText: (sectionId: string, text: string) => Promise<void>;
   onDeleteLine: (sectionId: string, lineId: string) => Promise<void>;
   onDeleteSection: (sectionId: string) => Promise<void>;
+  onUpdateSection: (sectionId: string, type: SectionType) => Promise<void>;
   onReorderSections: (sectionIds: string[]) => Promise<void>;
   onReorderLines: (sectionId: string, lineIds: string[]) => Promise<void>;
   onAddSection: () => void;
@@ -32,11 +34,13 @@ export function ToolboxPanel({
   onAddLine,
   onDeleteLine,
   onDeleteSection,
+  onUpdateSection,
   onReorderSections,
   onReorderLines,
   onAddSection,
   isUpdating,
   isMutating,
+  onAddLineWithText,
 }: ToolboxPanelProps) {
   return (
     <div className="h-full flex flex-col overflow-y-auto min-h-0">
@@ -82,8 +86,10 @@ export function ToolboxPanel({
           onReorderLines={onReorderLines}
           onUpdateLine={onUpdateLine}
           onAddLine={onAddLine}
+          onAddLineWithText={onAddLineWithText}
           onDeleteLine={onDeleteLine}
           onDeleteSection={onDeleteSection}
+          onUpdateSection={onUpdateSection}
           onAddSection={onAddSection}
           isMutating={isMutating}
         />

@@ -3,7 +3,7 @@
 import { use, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines } from '@/lib/hooks';
+import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines } from '@/lib/hooks';
 import { SplitPaneLayout } from '@/components/layout/SplitPaneLayout';
 import { ToolboxPanel } from '@/components/toolbox/ToolboxPanel';
 import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
@@ -25,6 +25,7 @@ export default function SongPage({ params }: PageProps) {
   const updateLine = useUpdateLine(resolvedParams.id);
   const addLine = useAddLine(resolvedParams.id);
   const addSection = useAddSection(resolvedParams.id);
+  const updateSectionMutation = useUpdateSection(resolvedParams.id);
   const reorderSections = useReorderSections(resolvedParams.id);
   const deleteLine = useDeleteLine(resolvedParams.id);
   const deleteSectionMutation = useDeleteSection(resolvedParams.id);
@@ -83,6 +84,26 @@ export default function SongPage({ params }: PageProps) {
     }
   }, [addLine, deleteLine, pushAction]);
 
+  const handleAddLineWithText = useCallback(async (sectionId: string, text: string) => {
+    const result = await addLine.mutateAsync({ section_id: sectionId, text });
+
+    // Find the newly added line (it should be the last one in the section)
+    const section = result.sections.find(s => s.id === sectionId);
+    const newLine = section?.lines[section.lines.length - 1];
+
+    if (newLine) {
+      pushAction({
+        description: 'Add line',
+        undo: async () => {
+          await deleteLine.mutateAsync({ section_id: sectionId, line_id: newLine.id });
+        },
+        redo: async () => {
+          await addLine.mutateAsync({ section_id: sectionId, text });
+        },
+      });
+    }
+  }, [addLine, deleteLine, pushAction]);
+
   const handleAddSection = useCallback(async () => {
     const result = await addSection.mutateAsync({ type: SectionType.VERSE });
 
@@ -101,6 +122,26 @@ export default function SongPage({ params }: PageProps) {
       });
     }
   }, [addSection, deleteSectionMutation, pushAction]);
+
+  const handleUpdateSection = useCallback(async (sectionId: string, type: SectionType) => {
+    // Find the current section type for undo
+    const section = song?.sections.find(s => s.id === sectionId);
+    const previousType = section?.type || SectionType.VERSE;
+
+    await updateSectionMutation.mutateAsync({ sectionId, type });
+
+    if (previousType !== type) {
+      pushAction({
+        description: 'Rename section',
+        undo: async () => {
+          await updateSectionMutation.mutateAsync({ sectionId, type: previousType });
+        },
+        redo: async () => {
+          await updateSectionMutation.mutateAsync({ sectionId, type });
+        },
+      });
+    }
+  }, [song, updateSectionMutation, pushAction]);
 
   const handleReorderSections = useCallback(async (sectionIds: string[]) => {
     // Store the previous order for undo
@@ -366,8 +407,10 @@ export default function SongPage({ params }: PageProps) {
             onUpdateSong={handleUpdateSong}
             onUpdateLine={handleUpdateLine}
             onAddLine={handleAddLine}
+            onAddLineWithText={handleAddLineWithText}
             onDeleteLine={handleDeleteLine}
             onDeleteSection={handleDeleteSection}
+            onUpdateSection={handleUpdateSection}
             onReorderSections={handleReorderSections}
             onReorderLines={handleReorderLines}
             onAddSection={handleAddSection}
@@ -376,6 +419,7 @@ export default function SongPage({ params }: PageProps) {
               addLine.isPending ||
               deleteLine.isPending ||
               updateLine.isPending ||
+              updateSectionMutation.isPending ||
               reorderSections.isPending ||
               deleteSectionMutation.isPending ||
               reorderLines.isPending

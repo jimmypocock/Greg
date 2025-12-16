@@ -16,6 +16,7 @@ import {
   addLine,
   updateLine,
   addSection,
+  updateSection,
   reorderSections,
   deleteLine,
   deleteSection,
@@ -28,6 +29,7 @@ import {
   AddLineRequest,
   UpdateLineRequest,
   AddSectionRequest,
+  UpdateSectionRequest,
   ReorderSectionsRequest,
   DeleteLineRequest,
   ApplyStructureRequest,
@@ -166,6 +168,19 @@ export function useAddSection(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: AddSectionRequest) => addSection(id, data),
+    onSuccess: (song) => {
+      queryClient.setQueryData(songKeys.detail(id), song);
+      queryClient.invalidateQueries({ queryKey: songKeys.lists() });
+    },
+  });
+}
+
+// Update section
+export function useUpdateSection(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { sectionId: string } & UpdateSectionRequest) =>
+      updateSection(id, data.sectionId, { type: data.type, number: data.number }),
     onSuccess: (song) => {
       queryClient.setQueryData(songKeys.detail(id), song);
       queryClient.invalidateQueries({ queryKey: songKeys.lists() });

@@ -14,6 +14,7 @@ export enum AgentTaskType {
   SECTION_REVIEW = 'section_review',
   CHECK_CLICHES = 'check_cliches',
   ANALYZE_RHYTHM = 'analyze_rhythm',
+  STRUCTURE_ANALYSIS = 'structure_analysis',
 }
 
 // Response when starting an agent task (returns immediately)

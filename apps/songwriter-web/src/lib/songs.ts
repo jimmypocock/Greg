@@ -14,6 +14,7 @@ import {
   AddLineRequest,
   UpdateLineRequest,
   AddSectionRequest,
+  UpdateSectionRequest,
   ReorderSectionsRequest,
   DeleteLineRequest,
   ApplyStructureRequest,
@@ -89,6 +90,11 @@ export async function updateLine(id: string, data: UpdateLineRequest): Promise<S
 // Add a new section
 export async function addSection(id: string, data: AddSectionRequest): Promise<Song> {
   return post<Song, AddSectionRequest>(`/songs/${id}/sections`, data);
+}
+
+// Update a section
+export async function updateSection(id: string, sectionId: string, data: UpdateSectionRequest): Promise<Song> {
+  return put<Song, UpdateSectionRequest>(`/songs/${id}/sections/${sectionId}`, data);
 }
 
 // Reorder sections

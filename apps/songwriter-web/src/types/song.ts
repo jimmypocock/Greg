@@ -178,6 +178,11 @@ export interface AddSectionRequest {
   after_section_id?: string;
 }
 
+export interface UpdateSectionRequest {
+  type?: SectionType;
+  number?: number;
+}
+
 export interface ReorderSectionsRequest {
   section_ids: string[];
 }

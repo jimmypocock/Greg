@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -28,8 +28,10 @@ interface SectionNavigatorProps {
   onReorderLines: (sectionId: string, lineIds: string[]) => void;
   onUpdateLine: (sectionId: string, lineId: string, text: string) => void;
   onAddLine: (sectionId: string) => void;
+  onAddLineWithText: (sectionId: string, text: string) => void;
   onDeleteLine: (sectionId: string, lineId: string) => void;
   onDeleteSection: (sectionId: string) => void;
+  onUpdateSection: (sectionId: string, type: SectionType) => void;
   onAddSection?: () => void;
   isMutating?: boolean;
 }
@@ -71,6 +73,7 @@ interface SortableLineProps {
   onEditChange: (text: string) => void;
   onSaveEdit: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  onPasteMultiline: (lines: string[]) => void;
   onDelete: () => void;
   isMutating?: boolean;
 }
@@ -83,6 +86,7 @@ function SortableLine({
   onEditChange,
   onSaveEdit,
   onKeyDown,
+  onPasteMultiline,
   onDelete,
   isMutating,
 }: SortableLineProps) {
@@ -113,6 +117,18 @@ function SortableLine({
           onChange={(e) => onEditChange(e.target.value)}
           onKeyDown={onKeyDown}
           onBlur={onSaveEdit}
+          onPaste={(e) => {
+            const pastedText = e.clipboardData.getData('text');
+            // Check if pasted text has multiple lines
+            if (pastedText.includes('\n')) {
+              e.preventDefault();
+              const lines = pastedText.split('\n').map(l => l.trim()).filter(l => l);
+              if (lines.length > 0) {
+                onPasteMultiline(lines);
+              }
+            }
+            // Single line paste is handled normally by the input
+          }}
           autoFocus
           className="
             flex-1 px-2 py-1 text-xs font-mono
@@ -180,9 +196,12 @@ interface SortableSectionProps {
   onToggle: () => void;
   onUpdateLine: (lineId: string, text: string) => void;
   onAddLine: () => void;
+  onAddLineWithText: (text: string) => void;
   onDeleteLine: (lineId: string) => void;
   onDeleteSection: () => void;
+  onUpdateSection: (type: SectionType) => void;
   onReorderLines: (lineIds: string[], newLines: Line[]) => void;
+  onOptimisticLineUpdate: (lineId: string, text: string) => void;
   isMutating?: boolean;
 }
 
@@ -193,9 +212,12 @@ function SortableSection({
   onToggle,
   onUpdateLine,
   onAddLine,
+  onAddLineWithText,
   onDeleteLine,
   onDeleteSection,
+  onUpdateSection,
   onReorderLines,
+  onOptimisticLineUpdate,
   isMutating,
 }: SortableSectionProps) {
   const {
@@ -214,6 +236,25 @@ function SortableSection({
 
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [isEditingType, setIsEditingType] = useState(false);
+
+  // Track if we should auto-edit the next new line
+  const shouldEditNewLine = useRef(false);
+  const prevLinesCount = useRef(lines.length);
+
+  // Auto-edit new line when it's created via Shift+Enter
+  useEffect(() => {
+    if (shouldEditNewLine.current && lines.length > prevLinesCount.current) {
+      // A new line was added - start editing it
+      const newLine = lines[lines.length - 1];
+      if (newLine) {
+        setEditingLineId(newLine.id);
+        setEditText(newLine.text);
+      }
+      shouldEditNewLine.current = false;
+    }
+    prevLinesCount.current = lines.length;
+  }, [lines]);
 
   // Sensors for line drag and drop
   const lineSensors = useSensors(
@@ -248,14 +289,54 @@ function SortableSection({
 
   const handleSaveEdit = () => {
     if (editingLineId) {
+      // Optimistically update local state immediately
+      onOptimisticLineUpdate(editingLineId, editText);
+      // Then trigger server update
       onUpdateLine(editingLineId, editText);
     }
     setEditingLineId(null);
     setEditText('');
   };
 
+  const handlePasteMultiline = (lineId: string, pastedLines: string[]) => {
+    if (pastedLines.length === 0) return;
+
+    // Update the current line with the first pasted line
+    const firstLine = pastedLines[0];
+    onOptimisticLineUpdate(lineId, firstLine);
+    onUpdateLine(lineId, firstLine);
+
+    // Add new lines for the rest
+    for (let i = 1; i < pastedLines.length; i++) {
+      onAddLineWithText(pastedLines[i]);
+    }
+
+    // Close the editor
+    setEditingLineId(null);
+    setEditText('');
+  };
+
+  const handleSaveAndNewLine = () => {
+    if (editingLineId) {
+      // Optimistically update local state immediately
+      onOptimisticLineUpdate(editingLineId, editText);
+      // Then trigger server update
+      onUpdateLine(editingLineId, editText);
+      // Flag that we want to edit the new line when it appears
+      shouldEditNewLine.current = true;
+      // Add a new line
+      onAddLine();
+    }
+    // Clear current edit state (useEffect will set new edit when line appears)
+    setEditingLineId(null);
+    setEditText('');
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
+      e.preventDefault();
+      handleSaveAndNewLine();
+    } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSaveEdit();
     } else if (e.key === 'Escape') {
@@ -294,9 +375,43 @@ function SortableSection({
         </div>
 
         <div className="flex-1">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            {fullLabel}
-          </span>
+          {isEditingType ? (
+            <select
+              value={section.type}
+              onChange={(e) => {
+                onUpdateSection(e.target.value as SectionType);
+                setIsEditingType(false);
+              }}
+              onBlur={() => setIsEditingType(false)}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+              className="
+                text-sm font-medium
+                bg-white dark:bg-gray-900
+                border border-indigo-300 dark:border-indigo-600
+                rounded px-2 py-0.5
+                focus:outline-none focus:ring-1 focus:ring-indigo-500
+                cursor-pointer
+              "
+            >
+              {Object.entries(sectionLabels).map(([type, label]) => (
+                <option key={type} value={type}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span
+              className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditingType(true);
+              }}
+              title="Click to change section type"
+            >
+              {fullLabel}
+            </span>
+          )}
           <span className="ml-2 text-xs text-gray-400">
             {lines.length} {lines.length === 1 ? 'line' : 'lines'}
           </span>
@@ -360,6 +475,7 @@ function SortableSection({
                       onEditChange={setEditText}
                       onSaveEdit={handleSaveEdit}
                       onKeyDown={handleKeyDown}
+                      onPasteMultiline={(pastedLines) => handlePasteMultiline(line.id, pastedLines)}
                       onDelete={() => onDeleteLine(line.id)}
                       isMutating={isMutating}
                     />
@@ -400,8 +516,10 @@ export function SectionNavigator({
   onReorderLines,
   onUpdateLine,
   onAddLine,
+  onAddLineWithText,
   onDeleteLine,
   onDeleteSection,
+  onUpdateSection,
   onAddSection,
   isMutating,
 }: SectionNavigatorProps) {
@@ -416,9 +534,9 @@ export function SectionNavigator({
   });
 
   // Sync local state with props when sections change from server
-  // Use a key based on section IDs and line IDs to detect real changes
+  // Use a key based on section IDs, line IDs, and line text to detect real changes
   const sectionsKey = useMemo(() => {
-    return sections.map(s => `${s.id}:${s.lines.map(l => l.id).join(',')}`).join('|');
+    return sections.map(s => `${s.id}:${s.lines.map(l => `${l.id}=${l.text}`).join(',')}`).join('|');
   }, [sections]);
 
   useEffect(() => {
@@ -466,6 +584,19 @@ export function SectionNavigator({
     onReorderLines(sectionId, lineIds);
   };
 
+  const handleOptimisticLineUpdate = (sectionId: string, lineId: string, text: string) => {
+    // Optimistically update line text in local state
+    setLocalLinesMap(prev => {
+      const sectionLines = prev[sectionId] || [];
+      return {
+        ...prev,
+        [sectionId]: sectionLines.map(line =>
+          line.id === lineId ? { ...line, text } : line
+        ),
+      };
+    });
+  };
+
   if (sections.length === 0) {
     return (
       <div className="text-center py-6">
@@ -509,9 +640,12 @@ export function SectionNavigator({
               onToggle={() => onSelectSection(section.id === selectedSectionId ? null : section.id)}
               onUpdateLine={(lineId, text) => onUpdateLine(section.id, lineId, text)}
               onAddLine={() => onAddLine(section.id)}
+              onAddLineWithText={(text) => onAddLineWithText(section.id, text)}
               onDeleteLine={(lineId) => onDeleteLine(section.id, lineId)}
               onDeleteSection={() => onDeleteSection(section.id)}
+              onUpdateSection={(type) => onUpdateSection(section.id, type)}
               onReorderLines={(lineIds, newLines) => handleReorderLines(section.id, lineIds, newLines)}
+              onOptimisticLineUpdate={(lineId, text) => handleOptimisticLineUpdate(section.id, lineId, text)}
               isMutating={isMutating}
             />
           ))}

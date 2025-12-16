@@ -13,6 +13,7 @@ const taskTypeLabels: Record<AgentTaskType, string> = {
   [AgentTaskType.SECTION_REVIEW]: 'Section Review',
   [AgentTaskType.CHECK_CLICHES]: 'Cliche Check',
   [AgentTaskType.ANALYZE_RHYTHM]: 'Rhythm Analysis',
+  [AgentTaskType.STRUCTURE_ANALYSIS]: 'Structure Analysis',
 };
 
 const taskTypeColors: Record<AgentTaskType, string> = {
@@ -20,6 +21,7 @@ const taskTypeColors: Record<AgentTaskType, string> = {
   [AgentTaskType.SECTION_REVIEW]: 'bg-blue-100 text-blue-800',
   [AgentTaskType.CHECK_CLICHES]: 'bg-purple-100 text-purple-800',
   [AgentTaskType.ANALYZE_RHYTHM]: 'bg-teal-100 text-teal-800',
+  [AgentTaskType.STRUCTURE_ANALYSIS]: 'bg-green-100 text-green-800',
 };
 
 export function ReviewHistory({ songId }: ReviewHistoryProps) {
