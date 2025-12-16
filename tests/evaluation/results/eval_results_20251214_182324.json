@@ -1,0 +1,264 @@
+{
+  "timestamp": "20251214_182324",
+  "summary": {
+    "total": 10,
+    "passed": 7,
+    "failed": 3,
+    "pass_rate": "70.0%",
+    "avg_retrieval_score": 0.391,
+    "by_category": {
+      "factual": {
+        "passed": 3,
+        "total": 5
+      },
+      "conceptual": {
+        "passed": 4,
+        "total": 4
+      },
+      "unanswerable": {
+        "passed": 0,
+        "total": 1
+      }
+    }
+  },
+  "results": [
+    {
+      "test_case_id": "tensor_001",
+      "question": "What is the rank of a tensor?",
+      "category": "factual",
+      "answer": "The context you provided does not define or explain the rank of a tensor.\n\nIn general (for deep learning / NumPy / PyTorch):\n\n- The **rank** of a tensor is the number of dimensions (also called **axes** or **ndim**) it has.\n  - Example:  \n    - A scalar has rank 0.  \n    - A vector like `[1, 2, 3]` has rank 1.  \n    - A matrix like `[[1, 2], [3, 4]]` has rank 2.  \n    - A batch of RGB images with shape `(batch, channels, height, width)` has rank 4.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.307
+        }
+      ],
+      "keywords_found": [
+        "axes",
+        "dimensions",
+        "number"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.307,
+      "passed": true,
+      "error": null
+    },
+    {
+      "test_case_id": "tensor_002",
+      "question": "What is the shape of a tensor?",
+      "category": "factual",
+      "answer": "The provided context does not explain what the shape of a tensor is.\n\nIn general, the *shape* of a tensor is the ordered list of its dimensions\u2014i.e., how many elements it has along each axis. For example, a tensor with shape:\n\n- `(3,)` is a 1D tensor with 3 elements  \n- `(2, 4)` is a 2D tensor with 2 rows and 4 columns  \n- `(32, 3, 224, 224)` might be a 4D tensor for images: 32 images, 3 channels, 224\u00d7224 pixels.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.317
+        }
+      ],
+      "keywords_found": [
+        "axis"
+      ],
+      "keywords_missing": [
+        "size",
+        "length"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.317,
+      "passed": false,
+      "error": null
+    },
+    {
+      "test_case_id": "weights_001",
+      "question": "Why do weights need negative values?",
+      "category": "conceptual",
+      "answer": "They don\u2019t always need to be negative, but allowing negative values makes the model far more expressive and useful.\n\nFrom the context:\n\n- **Weights are just variables** (model parameters) that control how inputs are combined to produce outputs.\n- Different **weight assignments** correspond to different behaviors or \u201cstrategies\u201d of the model.\n\nIf weights were forced to be only positive:\n\n1. **You could only ever add input effects.**  \n   An input feature could make a prediction stronger, but never *weaker*. For example, in image classification, a certain pattern (like \u201cwhiskers\u201d) might be evidence *against* \u201cdog\u201d and in favor of \u201ccat.\u201d You need a negative weight to let that feature reduce the \u201cdog\u201d score.\n\n2. **You couldn\u2019t represent many useful functions.**  \n   A general model needs to be able to say:  \n   - \u201cMore of this feature increases the output\u201d \u2192 positive weight  \n   - \u201cMore of this feature decreases the output\u201d \u2192 negative weight  \n\n3. **Learning by adjusting weights would be crippled.**  \n   The \u201cmechanism for altering the weight assignment\u201d (like stochastic gradient descent) must be free to move weights up *and* down to maximize performance. If weights can\u2019t go negative, the model can\u2019t discover strategies where some inputs should have an opposing effect.\n\nSo, negative weights are needed so that inputs can both support and oppose particular outputs, which is essential for a model to achieve high \u201cactual performance\u201d on complex tasks.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.374
+        }
+      ],
+      "keywords_found": [
+        "positive",
+        "negative"
+      ],
+      "keywords_missing": [
+        "ink",
+        "distinguish"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.374,
+      "passed": true,
+      "error": null
+    },
+    {
+      "test_case_id": "loss_001",
+      "question": "What is the difference between loss and metrics?",
+      "category": "conceptual",
+      "answer": "Loss and metrics both measure how well a model is doing, but they are used for different purposes:\n\n- **Loss**  \n  - Definition: A measure of how good the model is, chosen to drive training via stochastic gradient descent (SGD).  \n  - Purpose: Used by the training algorithm to update the model\u2019s parameters. It must be differentiable and suitable for optimization.  \n  - Computed on: Typically on the training data (and sometimes also reported on validation data), but its main role is in *updating weights*.\n\n- **Metric**  \n  - Definition: A measurement of how good the model is using the validation set, chosen for human consumption.  \n  - Purpose: Used to *evaluate* and *interpret* model performance in a way that\u2019s meaningful and easy for humans to understand (e.g., accuracy, error rate).  \n  - Computed on: Primarily on the validation set; it does *not* drive the weight updates.\n\nSo: **loss is for optimization (training the model), while metrics are for evaluation and interpretation (judging the model\u2019s performance).**",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.641
+        }
+      ],
+      "keywords_found": [
+        "gradient",
+        "training",
+        "human"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.641,
+      "passed": true,
+      "error": null
+    },
+    {
+      "test_case_id": "sgd_001",
+      "question": "What does SGD stand for and what does it do?",
+      "category": "factual",
+      "answer": "SGD stands for **stochastic gradient descent**. It is a general **automatic procedure for updating the weights (parameters) of a neural network** so that the model improves at a given task\u2014i.e., it \u201clearns from its experience\u201d by adjusting weights based on how well it\u2019s performing.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.344
+        }
+      ],
+      "keywords_found": [
+        "stochastic",
+        "gradient",
+        "descent",
+        "weights"
+      ],
+      "keywords_missing": [
+        "update"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.344,
+      "passed": true,
+      "error": null
+    },
+    {
+      "test_case_id": "lr_001",
+      "question": "What is a learning rate and why does it need to be small?",
+      "category": "conceptual",
+      "answer": "The context you provided does not define or discuss the learning rate, so I\u2019ll answer from general deep learning knowledge.\n\nA **learning rate** is a hyperparameter that controls **how big a step** the optimization algorithm (such as stochastic gradient descent) takes when updating the model\u2019s weights in response to the gradient of the loss.\n\nMathematically, a typical weight update looks like:\n\n\\[\nw_{\\text{new}} = w_{\\text{old}} - \\eta \\cdot \\nabla L(w_{\\text{old}})\n\\]\n\nwhere:\n- \\( w \\) are the weights,\n- \\( \\nabla L(w) \\) is the gradient of the loss with respect to \\( w \\),\n- \\( \\eta \\) (eta) is the **learning rate**.\n\nIt needs to be **small enough** because:\n\n- If the learning rate is **too large**, the updates overshoot the minimum of the loss function, causing:\n  - Divergence (loss blows up),\n  - Or oscillation around the minimum without converging.\n- A **smaller** learning rate gives:\n  - More stable, gradual progress toward a minimum,\n  - Better chance of actually converging and not skipping over good solutions.\n\nHowever, if it\u2019s **too small**, training becomes very slow and can get stuck in poor local minima or plateaus. So it must be **small, but not too small**\u2014chosen to balance stability and speed of learning.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.372
+        }
+      ],
+      "keywords_found": [
+        "step",
+        "gradient",
+        "overshoot"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.372,
+      "passed": true,
+      "error": null
+    },
+    {
+      "test_case_id": "sigmoid_001",
+      "question": "What does the sigmoid function do?",
+      "category": "factual",
+      "answer": "The context you provided doesn\u2019t define or describe the sigmoid function, so it doesn\u2019t contain enough information to answer this question.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.236
+        }
+      ],
+      "keywords_found": [],
+      "keywords_missing": [
+        "0",
+        "1",
+        "probability",
+        "squash"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.236,
+      "passed": false,
+      "error": null
+    },
+    {
+      "test_case_id": "epoch_001",
+      "question": "What is the difference between an epoch and an iteration?",
+      "category": "factual",
+      "answer": "The context only defines *epoch* and does not mention *iteration*, so I have to answer partly from general knowledge.\n\nFrom the context:\n- **Epoch**: \u201cOne complete pass through the input data.\u201d\n\nIn general deep learning usage:\n- **Epoch**: One full pass over the entire training dataset.\n- **Iteration** (often called a *training step* or *batch update*): One parameter update, i.e., one pass of a single batch (mini-batch) through the model and backpropagation.\n\nIf you have, for example, 10,000 training examples and a batch size of 100:\n- 1 **epoch** = seeing all 10,000 examples once.\n- Number of **iterations per epoch** = 10,000 / 100 = 100 iterations.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.408
+        }
+      ],
+      "keywords_found": [
+        "entire",
+        "dataset",
+        "batch",
+        "pass"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.408,
+      "passed": true,
+      "error": null
+    },
+    {
+      "test_case_id": "overfit_001",
+      "question": "How do you know if a model is overfitting?",
+      "category": "conceptual",
+      "answer": "You know a model is overfitting by monitoring its performance on a validation set:\n\n- During training, the **training accuracy keeps improving** (or training loss keeps decreasing),\n- But after some point, the **validation accuracy starts getting worse** (or validation loss starts increasing).\n\nIn other words, the model is doing better and better on the data it has seen (training set) but worse on new, unseen data (validation set), which means it is memorizing instead of learning generalizable patterns.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.708
+        }
+      ],
+      "keywords_found": [
+        "validation",
+        "training",
+        "loss"
+      ],
+      "keywords_missing": [
+        "gap"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.708,
+      "passed": true,
+      "error": null
+    },
+    {
+      "test_case_id": "unanswerable_001",
+      "question": "What is the capital of France?",
+      "category": "unanswerable",
+      "answer": "The context doesn\u2019t contain information about this.  \n\nThe capital of France is Paris.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.204
+        }
+      ],
+      "keywords_found": [],
+      "keywords_missing": [],
+      "unwanted_found": [
+        "Paris"
+      ],
+      "retrieval_score": 0.204,
+      "passed": false,
+      "error": null
+    }
+  ]
+}

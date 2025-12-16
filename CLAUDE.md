@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Greg is a production-ready RAG (Retrieval-Augmented Generation) system with:
+Greg is a modular creative writing platform with:
 
-1. **FastAPI Backend** (port 8080): Document processing, vector storage, Q&A, authentication
-2. **PostgreSQL + pgvector**: User accounts, sessions, documents, vector embeddings
-3. **Redis + ARQ**: Background job queue for document processing
-4. **Ollama** (port 11434): Local LLM inference (Mistral, Llama, Phi, Deepseek)
-5. **WebSocket**: Real-time progress updates for long-running jobs
+1. **Modular Architecture**: `packages/core/` for shared infrastructure, `apps/` for specific applications
+2. **FastAPI Backend** (port 8080): Document processing, vector storage, Q&A, authentication
+3. **PostgreSQL + pgvector**: User accounts, sessions, documents, vector embeddings
+4. **Redis + ARQ**: Background job queue for document processing
+5. **Ollama** (port 11434): Local LLM inference (Mistral, Llama, Phi, Deepseek)
+6. **WebSocket**: Real-time progress updates for long-running jobs
 
 ## Quick Start
 
@@ -45,110 +46,58 @@ All commands use the `greg` CLI (via `uv run greg <command>`):
 | `clean` | Clean temporary files |
 | `help` | Show all commands |
 
-## API Endpoints
-
-### Authentication
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/auth/register` | POST | None | Register (first user = admin, others need invite) |
-| `/auth/token` | POST | None | Login with JSON body, get tokens |
-| `/auth/refresh` | POST | None | Exchange refresh token for new tokens |
-| `/auth/logout` | POST | None | Revoke refresh token |
-| `/auth/logout-all` | POST | JWT | Revoke all sessions |
-| `/auth/me` | GET | JWT | Get current user profile |
-| `/auth/sessions` | GET | JWT | List active sessions |
-| `/auth/sessions/{id}` | DELETE | JWT | Revoke specific session |
-
-### Documents
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/documents` | GET | JWT | List processed documents |
-| `/documents` | POST | JWT | Upload document (returns job_id) |
-| `/documents/{id}` | DELETE | JWT | Delete a document |
-| `/documents` | DELETE | Admin | Clear all documents |
-| `/documents/url` | POST | JWT | Process URL as document |
-
-### Q&A
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/ask` | POST | JWT | Ask a question (streaming SSE) |
-| `/web-search` | POST | JWT | Web search query (streaming SSE) |
-
-### Jobs (Background Tasks)
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/jobs/{id}` | GET | JWT | Get job status |
-| `/jobs/{id}/cancel` | POST | JWT | Cancel a job |
-| `/jobs` | GET | Admin | List all jobs |
-
-### Costs
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/costs` | GET | JWT | Daily cost summary |
-| `/costs/requests` | GET | JWT | Recent AI requests |
-| `/costs/total` | GET | JWT | Total cost for period |
-
-### API Keys
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api-keys/` | POST | JWT | Create API key |
-| `/api-keys/` | GET | JWT | List your API keys |
-| `/api-keys/{id}` | DELETE | JWT | Revoke API key |
-
-### Admin
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/admin/users` | GET | Admin | List all users |
-| `/admin/users/{id}` | GET | Admin | Get user details |
-| `/admin/users/{id}` | PATCH | Admin | Update user role |
-| `/admin/users/{id}` | DELETE | Admin | Delete user |
-| `/admin/invites` | POST | Admin | Create invite code |
-| `/admin/invites` | GET | Admin | List invites |
-| `/admin/invites/{code}` | DELETE | Admin | Revoke invite |
-
-### Storage
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/storage` | GET | JWT | Vector store statistics |
-| `/storage/cleanup` | POST | Admin | Trigger storage cleanup |
-
-### System
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/` | GET | None | API info |
-| `/health` | GET | None | System health check |
-| `/models` | GET | None | List available LLM models |
-| `/docs` | GET | None | OpenAPI documentation |
-
-### WebSocket
-| Endpoint | Description |
-|----------|-------------|
-| `/ws/jobs/{job_id}` | Subscribe to specific job progress |
-| `/ws` | General WebSocket (subscribe to multiple jobs) |
-
 ## Architecture
 
 ### File Structure
 ```
-/
-├── documents/           # User documents (gitignored)
-├── src/
-│   ├── api/            # FastAPI routes and dependencies
-│   │   └── routes/     # Route modules (ask, auth, documents, etc.)
-│   ├── auth/           # Authentication (JWT, refresh tokens, API keys)
-│   ├── costs/          # Cost tracking and pricing
-│   ├── database/       # SQLAlchemy models and connection
-│   │   └── models/     # One model per file (Rails-style)
-│   ├── jobs/           # Background job processing (ARQ)
-│   ├── websocket/      # WebSocket manager and events
-│   ├── config/         # Environment configuration
-│   └── security/       # Input sanitization
-├── alembic/            # Database migrations
-├── tests/              # Test suites
-├── docker-compose.yml  # PostgreSQL + Redis
-├── pyproject.toml      # Dependencies and config
-├── run.py              # CLI runner
-└── main.py             # FastAPI application
+Greg/
+├── packages/
+│   └── core/                    # Shared infrastructure
+│       ├── admin/              # Admin services (user management, invites)
+│       ├── api/                # Core API factory and routes
+│       │   └── routes/         # Auth, admin, jobs, costs, models, health
+│       ├── api_keys/           # API key management
+│       ├── auth/               # Authentication (FastAPI-Users + extensions)
+│       ├── config/             # Environment configuration
+│       ├── costs/              # Cost tracking and pricing
+│       ├── database/           # SQLAlchemy models and connection
+│       │   └── models/         # One model per file (Rails-style)
+│       ├── jobs/               # Background job infrastructure (ARQ)
+│       ├── llm/                # LLM providers (Ollama, OpenAI, Anthropic, Google)
+│       ├── root/               # Root endpoint schemas
+│       ├── security/           # Input sanitization
+│       ├── utils/              # Async I/O utilities
+│       └── websocket/          # WebSocket manager and events
+│
+├── apps/
+│   ├── writer/                  # Creative writing assistant app
+│   │   ├── app.py              # App factory (extends core)
+│   │   ├── jobs/               # Document processing workers
+│   │   │   └── document_worker.py
+│   │   ├── routes/             # Writer-specific routes
+│   │   │   ├── admin/          # Document admin routes
+│   │   │   ├── ask.py          # Q&A endpoint
+│   │   │   ├── documents.py    # Document upload/management
+│   │   │   ├── storage.py      # Storage statistics
+│   │   │   └── web_search.py   # Web search
+│   │   ├── services/           # Writer services
+│   │   │   ├── ask/            # Q&A schemas and handlers
+│   │   │   ├── documents/      # Document processing service
+│   │   │   ├── rag/            # RAG query service, web search
+│   │   │   ├── search/         # Web search service
+│   │   │   ├── storage/        # Storage statistics service
+│   │   │   ├── streaming/      # SSE streaming utilities
+│   │   │   └── vectorstore/    # pgvector integration
+│   │   └── models/             # Writer-specific models (if needed)
+│   │
+│   └── vocal/                   # Future vocal training app (placeholder)
+│
+├── alembic/                     # Database migrations
+├── tests/                       # Test suites
+├── docker-compose.yml           # PostgreSQL + Redis
+├── pyproject.toml               # Dependencies and config
+├── run.py                       # CLI runner
+└── main.py                      # FastAPI application (runs writer app)
 ```
 
 ### Database Tables
@@ -163,13 +112,22 @@ document_chunks    # Text chunks + pgvector embeddings
 ```
 
 ### Key Modules
-- `src/database/models/` - One model per file (user.py, invite.py, etc.)
-- `src/auth/users.py` - FastAPI-Users configuration
-- `src/auth/refresh_tokens.py` - Refresh token service
-- `src/auth/dependencies.py` - Auth dependencies (CurrentUser, AdminUser)
-- `src/costs/tracker.py` - Cost tracking with on-the-fly aggregation
-- `src/jobs/` - ARQ worker and job manager
-- `src/websocket/manager.py` - WebSocket connection management
+
+**Core (packages/core/):**
+- `auth/users.py` - FastAPI-Users configuration
+- `auth/refresh_tokens.py` - Refresh token service
+- `auth/dependencies.py` - Auth dependencies (CurrentUser, AdminUser)
+- `database/models/` - One model per file (user.py, invite.py, etc.)
+- `costs/tracker.py` - Cost tracking with on-the-fly aggregation
+- `jobs/manager.py` - Job manager for background tasks
+- `websocket/manager.py` - WebSocket connection management
+- `api/app.py` - Core app factory (`create_core_app`)
+
+**Writer App (apps/writer/):**
+- `app.py` - Writer app factory (extends core)
+- `services/rag/query_service.py` - RAG query execution
+- `services/documents/service.py` - Document processing
+- `jobs/document_worker.py` - Background document processing
 
 ### Authentication Flow
 1. First user to register becomes admin automatically (no invite needed)
@@ -188,6 +146,90 @@ Document uploads are processed asynchronously:
 1. Upload returns `job_id` immediately
 2. Connect to `/ws/jobs/{job_id}` for real-time progress
 3. Poll `/jobs/{job_id}` for status if WebSocket unavailable
+
+## API Endpoints
+
+### Core Routes (packages/core)
+
+#### Authentication
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/auth/register` | POST | None | Register (first user = admin, others need invite) |
+| `/auth/token` | POST | None | Login with JSON body, get tokens |
+| `/auth/refresh` | POST | None | Exchange refresh token for new tokens |
+| `/auth/logout` | POST | None | Revoke refresh token |
+| `/auth/logout-all` | POST | JWT | Revoke all sessions |
+| `/auth/me` | GET | JWT | Get current user profile |
+| `/auth/sessions` | GET | JWT | List active sessions |
+| `/auth/sessions/{id}` | DELETE | JWT | Revoke specific session |
+
+#### Jobs (Background Tasks)
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/jobs/{id}` | GET | JWT | Get job status |
+| `/jobs/{id}/cancel` | POST | JWT | Cancel a job |
+| `/jobs` | GET | Admin | List all jobs |
+
+#### Costs
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/costs` | GET | JWT | Daily cost summary |
+| `/costs/requests` | GET | JWT | Recent AI requests |
+| `/costs/total` | GET | JWT | Total cost for period |
+
+#### API Keys
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api-keys/` | POST | JWT | Create API key |
+| `/api-keys/` | GET | JWT | List your API keys |
+| `/api-keys/{id}` | DELETE | JWT | Revoke API key |
+
+#### Admin
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/admin/users` | GET | Admin | List all users |
+| `/admin/users/{id}` | GET | Admin | Get user details |
+| `/admin/users/{id}` | PATCH | Admin | Update user role |
+| `/admin/users/{id}` | DELETE | Admin | Delete user |
+| `/admin/invites` | POST | Admin | Create invite code |
+| `/admin/invites` | GET | Admin | List invites |
+| `/admin/invites/{code}` | DELETE | Admin | Revoke invite |
+
+#### System
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/` | GET | None | API info |
+| `/health` | GET | None | System health check |
+| `/models` | GET | None | List available LLM models |
+| `/docs` | GET | None | OpenAPI documentation |
+
+#### WebSocket
+| Endpoint | Description |
+|----------|-------------|
+| `/ws/jobs/{job_id}` | Subscribe to specific job progress |
+| `/ws` | General WebSocket (subscribe to multiple jobs) |
+
+### Writer App Routes (apps/writer)
+
+#### Documents
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/documents` | GET | JWT | List processed documents |
+| `/documents` | POST | JWT | Upload document (returns job_id) |
+| `/documents/{id}` | DELETE | JWT | Delete a document |
+| `/documents/url` | POST | JWT | Process URL as document |
+| `/admin/documents` | DELETE | Admin | Clear all documents |
+
+#### Q&A
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/ask` | POST | JWT | Ask a question (streaming SSE or JSON) |
+| `/web-search` | POST | JWT | Web search query (streaming SSE) |
+
+#### Storage
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/storage` | GET | JWT | Vector store statistics |
 
 ## Testing
 
@@ -264,30 +306,56 @@ uv run alembic downgrade -1
 
 ## Common Tasks
 
-### Add a New Route
-1. Create route file in `src/api/routes/`
-2. Add router to `src/api/app.py`
-3. Add auth dependencies as needed (`CurrentUser`, `AdminUser`)
+### Add a Core Route (shared across apps)
+1. Create route file in `packages/core/api/routes/`
+2. Add router to `packages/core/api/routes/__init__.py`
+3. Add router to `packages/core/api/app.py` in `_register_core_routes()`
+4. Add auth dependencies as needed (`CurrentUser`, `AdminUser`)
 
-### Add a Background Job
-1. Create job function in `src/jobs/document_worker.py`
-2. Add to `WorkerSettings.functions` in `src/jobs/worker.py`
+### Add a Writer App Route
+1. Create route file in `apps/writer/routes/`
+2. Import and register in `apps/writer/app.py` `register_writer_routes()`
+3. Add exception handlers if needed
+
+### Add a Background Job (Writer)
+1. Create job function in `apps/writer/jobs/document_worker.py`
+2. Add to `WorkerSettings.functions` in `packages/core/jobs/worker.py`
 3. Enqueue with `job_manager.create_job()`
 
-### Add a New Model
-1. Create model file in `src/database/models/`
-2. Export from `src/database/models/__init__.py`
-3. Export from `src/database/__init__.py`
+### Add a Core Model (shared)
+1. Create model file in `packages/core/database/models/`
+2. Export from `packages/core/database/models/__init__.py`
+3. Export from `packages/core/database/__init__.py`
 4. Create migration with `uv run alembic revision --autogenerate -m "add X table"`
+
+### Create a New App
+1. Create `apps/newapp/` directory
+2. Create `apps/newapp/app.py`:
+```python
+from packages.core.api.app import create_core_app
+from apps.newapp.routes import feature1, feature2
+
+def register_routes(app):
+    app.include_router(feature1.router)
+    app.include_router(feature2.router)
+
+def create_app():
+    return create_core_app(
+        title="New App",
+        extra_routes_registrar=register_routes,
+    )
+```
+3. Create a new `main_newapp.py` or update `main.py` to run the new app
 
 ## Best Practices
 
 1. **Authentication**: All new routes should require auth unless public
-2. **Imports**: Use `from src.module` format, never relative imports
+2. **Imports**: Use `from packages.core.module` or `from apps.writer.module` format
 3. **Async**: All database and I/O operations should be async
 4. **Validation**: Use Pydantic models for request/response schemas
 5. **Errors**: Return proper HTTP status codes with detail messages
-6. **Models**: One model per file in `src/database/models/`
+6. **Models**: One model per file in `packages/core/database/models/`
+7. **Core vs App**: Put shared functionality in `packages/core/`, app-specific in `apps/<app>/`
 
 ## Code Conventions
 
@@ -313,12 +381,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth import CurrentUser
-from src.auth.schemas import (
-    SchemaA,
-    SchemaB,
-)
-from src.database import Model, get_session_dependency
+from packages.core.auth import CurrentUser
+from packages.core.database import Model, get_session_dependency
 
 logger = logging.getLogger(__name__)
 
@@ -384,30 +448,6 @@ async def get_item(user: Annotated[User, Depends(current_active_user)]):
     ...
 ```
 
-### Schemas
-
-- All schemas live in `src/auth/schemas.py`
-- Alphabetize by class name
-- Use `Field()` for validation
-- Naming: `{Resource}{Action}Request/Response`
-
-```python
-# Schemas
-
-class ResourceCreateRequest(BaseModel):
-    """Request to create a resource."""
-
-    name: str = Field(..., min_length=1, max_length=100)
-
-
-class ResourceResponse(BaseModel):
-    """Resource info response."""
-
-    id: str
-    name: str
-    created_at: str
-```
-
 ### Logging
 
 - Log security/audit events (login, logout, key creation/revocation)
@@ -420,4 +460,5 @@ Organize in groups, alphabetized within each:
 
 1. Standard library (`import logging`, `from typing import ...`)
 2. Third-party (`from fastapi import ...`, `from sqlalchemy import ...`)
-3. Local (`from src.auth import ...`, `from src.database import ...`)
+3. Core packages (`from packages.core.auth import ...`, `from packages.core.database import ...`)
+4. App-specific (`from apps.writer.services import ...`)

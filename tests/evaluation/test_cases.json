@@ -1,0 +1,307 @@
+{
+  "metadata": {
+    "description": "Evaluation test cases for Greg RAG system - Chapter 1 questions from fastai book",
+    "source_document": "DLfastai.pdf (Chapter 1)",
+    "created": "2024-12-14",
+    "version": "2.0"
+  },
+  "test_cases": [
+    {
+      "id": "ch1_001",
+      "question": "Do you need lots of math for deep learning?",
+      "expected_keywords": ["no", "false", "high school"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Book says you don't need lots of math"
+    },
+    {
+      "id": "ch1_002",
+      "question": "Do you need lots of data for deep learning?",
+      "expected_keywords": ["no", "false", "less", "pretrained"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Transfer learning reduces data needs"
+    },
+    {
+      "id": "ch1_003",
+      "question": "Do you need expensive computers for deep learning?",
+      "expected_keywords": ["no", "false", "free", "cloud", "gpu"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Free cloud GPUs available"
+    },
+    {
+      "id": "ch1_004",
+      "question": "Do you need a PhD for deep learning?",
+      "expected_keywords": ["no", "false"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "No PhD required"
+    },
+    {
+      "id": "ch1_005",
+      "question": "Name five areas where deep learning is now the best tool in the world.",
+      "expected_keywords": ["natural language", "computer vision", "medicine", "biology", "image", "recommendation", "games", "robotics", "text"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "List of deep learning applications - need 5 of many"
+    },
+    {
+      "id": "ch1_006",
+      "question": "What was the name of the first device that was based on the principle of the artificial neuron?",
+      "expected_keywords": ["mark", "perceptron"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Mark I Perceptron by Rosenblatt"
+    },
+    {
+      "id": "ch1_007",
+      "question": "What are the requirements for parallel distributed processing (PDP)?",
+      "expected_keywords": ["processing", "units", "activation", "connections", "weights"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "PDP requirements from the book"
+    },
+    {
+      "id": "ch1_008",
+      "question": "What were the two theoretical misunderstandings that held back the field of neural networks?",
+      "expected_keywords": ["minsky", "papert", "single", "layer", "xor"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Minsky/Papert critique and single layer limitations"
+    },
+    {
+      "id": "ch1_009",
+      "question": "What is a GPU?",
+      "expected_keywords": ["graphics", "processing", "unit", "parallel"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Graphics Processing Unit definition"
+    },
+    {
+      "id": "ch1_010",
+      "question": "Why is it hard to use a traditional computer program to recognize images in a photo?",
+      "expected_keywords": ["rules", "features", "variations", "explicit", "steps"],
+      "expected_not_contain": [],
+      "category": "conceptual",
+      "chapter": 1,
+      "notes": "Difficulty of hand-coding image recognition rules"
+    },
+    {
+      "id": "ch1_011",
+      "question": "What did Samuel mean by weight assignment?",
+      "expected_keywords": ["variables", "parameters", "values", "choices"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Arthur Samuel's terminology"
+    },
+    {
+      "id": "ch1_012",
+      "question": "What term do we normally use in deep learning for what Samuel called weights?",
+      "expected_keywords": ["parameters"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Modern terminology for weights"
+    },
+    {
+      "id": "ch1_013",
+      "question": "Why is it hard to understand why a deep learning model makes a particular prediction?",
+      "expected_keywords": ["layers", "parameters", "complex", "black box", "millions"],
+      "expected_not_contain": [],
+      "category": "conceptual",
+      "chapter": 1,
+      "notes": "Interpretability challenge"
+    },
+    {
+      "id": "ch1_014",
+      "question": "What is the name of the theorem that shows that a neural network can solve any mathematical problem to any level of accuracy?",
+      "expected_keywords": ["universal", "approximation"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Universal approximation theorem"
+    },
+    {
+      "id": "ch1_015",
+      "question": "What do you need in order to train a model?",
+      "expected_keywords": ["data", "labels", "architecture", "loss"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Requirements for training"
+    },
+    {
+      "id": "ch1_016",
+      "question": "How could a feedback loop impact the rollout of a predictive policing model?",
+      "expected_keywords": ["bias", "arrest", "reinforce", "more"],
+      "expected_not_contain": [],
+      "category": "conceptual",
+      "chapter": 1,
+      "notes": "Bias amplification in ML systems"
+    },
+    {
+      "id": "ch1_017",
+      "question": "Do we always have to use 224x224 pixel images with the cat recognition model?",
+      "expected_keywords": ["no", "different", "size", "resize"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Image size flexibility"
+    },
+    {
+      "id": "ch1_018",
+      "question": "What is the difference between classification and regression?",
+      "expected_keywords": ["discrete", "continuous", "categories", "class", "number", "predict"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Classification vs regression distinction"
+    },
+    {
+      "id": "ch1_019",
+      "question": "What is a validation set? What is a test set? Why do we need them?",
+      "expected_keywords": ["evaluate", "overfitting", "generalization", "unseen", "measure"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Train/validation/test split purpose"
+    },
+    {
+      "id": "ch1_020",
+      "question": "What will fastai do if you don't provide a validation set?",
+      "expected_keywords": ["automatically", "create", "random", "split", "20"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "fastai default validation behavior"
+    },
+    {
+      "id": "ch1_021",
+      "question": "Can we always use a random sample for a validation set? Why or why not?",
+      "expected_keywords": ["no", "time", "series", "similar", "leak"],
+      "expected_not_contain": [],
+      "category": "conceptual",
+      "chapter": 1,
+      "notes": "When random validation splits fail"
+    },
+    {
+      "id": "ch1_022",
+      "question": "What is overfitting? Provide an example.",
+      "expected_keywords": ["memorize", "training", "generalize", "validation", "worse"],
+      "expected_not_contain": [],
+      "category": "conceptual",
+      "chapter": 1,
+      "notes": "Overfitting definition and example"
+    },
+    {
+      "id": "ch1_023",
+      "question": "What is a metric? How does it differ from loss?",
+      "expected_keywords": ["human", "performance", "optimization", "gradient", "measure"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Metric vs loss distinction"
+    },
+    {
+      "id": "ch1_024",
+      "question": "How can pretrained models help?",
+      "expected_keywords": ["transfer", "learning", "less", "data", "faster", "features"],
+      "expected_not_contain": [],
+      "category": "conceptual",
+      "chapter": 1,
+      "notes": "Benefits of transfer learning"
+    },
+    {
+      "id": "ch1_025",
+      "question": "What is the head of a model?",
+      "expected_keywords": ["final", "layer", "task", "specific", "replaced", "output"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Model head definition"
+    },
+    {
+      "id": "ch1_026",
+      "question": "What kinds of features do the early layers of a CNN find? How about the later layers?",
+      "expected_keywords": ["edge", "gradient", "simple", "complex", "pattern", "object"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "CNN layer feature hierarchy"
+    },
+    {
+      "id": "ch1_027",
+      "question": "Are image models useful only for photos?",
+      "expected_keywords": ["no", "sound", "time series", "tabular", "convert"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Image models for non-image data"
+    },
+    {
+      "id": "ch1_028",
+      "question": "What is an architecture?",
+      "expected_keywords": ["template", "structure", "function", "layers", "mathematical"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Neural network architecture definition"
+    },
+    {
+      "id": "ch1_029",
+      "question": "What is segmentation?",
+      "expected_keywords": ["pixel", "classify", "region", "label", "image"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Image segmentation definition"
+    },
+    {
+      "id": "ch1_030",
+      "question": "What is y_range used for? When do we need it?",
+      "expected_keywords": ["output", "range", "regression", "continuous", "predict"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "y_range parameter in fastai"
+    },
+    {
+      "id": "ch1_031",
+      "question": "What are hyperparameters?",
+      "expected_keywords": ["parameters", "learning rate", "chosen", "not learned", "setting"],
+      "expected_not_contain": [],
+      "category": "factual",
+      "chapter": 1,
+      "notes": "Hyperparameters definition"
+    },
+    {
+      "id": "ch1_032",
+      "question": "What's the best way to avoid failures when using AI in an organization?",
+      "expected_keywords": ["human", "oversight", "domain", "expert", "validation", "check"],
+      "expected_not_contain": [],
+      "category": "conceptual",
+      "chapter": 1,
+      "notes": "Responsible AI deployment"
+    },
+    {
+      "id": "ch1_unanswerable",
+      "question": "What is the capital of France?",
+      "expected_keywords": [],
+      "expected_not_contain": ["Paris"],
+      "category": "unanswerable",
+      "chapter": null,
+      "notes": "Should indicate info not in documents - tests hallucination guardrails"
+    }
+  ]
+}

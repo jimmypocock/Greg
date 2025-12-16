@@ -1,0 +1,960 @@
+{
+  "timestamp": "20251214_190318",
+  "evaluation_method": "llm-as-judge",
+  "summary": {
+    "total": 33,
+    "passed": 32,
+    "failed": 1,
+    "pass_rate": "97.0%",
+    "avg_retrieval_score": 0.566,
+    "avg_llm_score": 4.48,
+    "by_category": {
+      "factual": {
+        "passed": 24,
+        "total": 25
+      },
+      "conceptual": {
+        "passed": 7,
+        "total": 7
+      },
+      "unanswerable": {
+        "passed": 1,
+        "total": 1
+      }
+    },
+    "suspicious_count": 3
+  },
+  "results": [
+    {
+      "test_case_id": "ch1_001",
+      "question": "Do you need lots of math for deep learning?",
+      "category": "factual",
+      "answer": "No. According to the context, you do *not* need lots of math for deep learning; high school\u2013level math is sufficient.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.634
+        }
+      ],
+      "keywords_found": [
+        "no",
+        "high school"
+      ],
+      "keywords_missing": [
+        "false"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.634,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer correctly addresses the question and provides an accurate statement about deep learning, though it could benefit from using keywords such as 'no', 'false', or 'high school' to more closely match the expected format."
+    },
+    {
+      "test_case_id": "ch1_002",
+      "question": "Do you need lots of data for deep learning?",
+      "category": "factual",
+      "answer": "No. According to the context, you do **not** need lots of data for deep learning\u2014record\u2011breaking results have been achieved with fewer than 50 data items.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.631
+        }
+      ],
+      "keywords_found": [
+        "no"
+      ],
+      "keywords_missing": [
+        "false",
+        "less",
+        "pretrained"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.631,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer correctly states that deep learning doesn't necessarily require lots of data, which is a direct response to the question. It also mentions that record-breaking results have been achieved with fewer than 50 data items, although it could have explicitly stated 'less' data. Lastly, it indirectly refers to the key concept of transfer learning by implying that pretrained models can reduce the data needs for deep learning."
+    },
+    {
+      "test_case_id": "ch1_003",
+      "question": "Do you need expensive computers for deep learning?",
+      "category": "factual",
+      "answer": "No. You do **not** need lots of expensive computers for deep learning. The text states you can get what you need for state-of-the-art work for free or very cheaply (e.g., renting GPU servers for around $0.25 per hour, with some free options).",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.649
+        }
+      ],
+      "keywords_found": [
+        "no",
+        "free",
+        "gpu"
+      ],
+      "keywords_missing": [
+        "false",
+        "cloud"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.649,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer is both accurate and complete. It correctly states that expensive computers are not necessary for deep learning and provides a detailed explanation with examples such as free cloud GPUs available for rent at around $0.25 per hour, making it a perfect response to the question."
+    },
+    {
+      "test_case_id": "ch1_004",
+      "question": "Do you need a PhD for deep learning?",
+      "category": "factual",
+      "answer": "No. You do not need a PhD for deep learning.  \n\nFrom the context:  \n- Elon Musk says a PhD is \u201cdefinitely not required\u201d and that he doesn\u2019t \u201ccare if you even graduated high school.\u201d  \n- The book explicitly lists \u201cA PhD\u201d under things you *don\u2019t* need for deep learning.  \n\nWhat matters instead is a deep understanding of AI, the ability to implement neural networks usefully, and consistent practice on real projects.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.588
+        }
+      ],
+      "keywords_found": [
+        "no"
+      ],
+      "keywords_missing": [
+        "false"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.588,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer directly and accurately responds to the question by stating that a PhD is not required for deep learning. The information is supported by context from Elon Musk and the book mentioned in the prompt."
+    },
+    {
+      "test_case_id": "ch1_005",
+      "question": "Name five areas where deep learning is now the best tool in the world.",
+      "category": "factual",
+      "answer": "- Natural language processing (NLP)  \n- Computer vision  \n- Medicine  \n- Biology  \n- Scientific research (including areas like finance, social and physical sciences, arts, etc.)",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.634
+        }
+      ],
+      "keywords_found": [
+        "natural language",
+        "computer vision",
+        "medicine",
+        "biology"
+      ],
+      "keywords_missing": [
+        "image",
+        "recommendation",
+        "games",
+        "robotics",
+        "text"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.634,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is mostly correct as it lists five areas where deep learning is now the best tool in the world. However, it misses mentioning 'image' and 'recommendation systems', which are significant applications of deep learning, especially in computer vision and personalization respectively."
+    },
+    {
+      "test_case_id": "ch1_006",
+      "question": "What was the name of the first device that was based on the principle of the artificial neuron?",
+      "category": "factual",
+      "answer": "The first device based on the principle of the artificial neuron was called the **Mark I Perceptron**.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.607
+        }
+      ],
+      "keywords_found": [
+        "mark",
+        "perceptron"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.607,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is mostly correct as it provides the name of the first device based on the principle of the artificial neuron (Mark I Perceptron). However, it does not explicitly mention who developed this device, which was Rosenblatt. While this information is not required for a complete answer to this question, it would have made the response more accurate and detailed."
+    },
+    {
+      "test_case_id": "ch1_007",
+      "question": "What are the requirements for parallel distributed processing (PDP)?",
+      "category": "factual",
+      "answer": "The requirements for parallel distributed processing (PDP), based on the book of the same name, are:\n\n- A set of processing units  \n- A state of activation  \n- An output function for each unit  \n- A pattern of connectivity among units",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.65
+        }
+      ],
+      "keywords_found": [
+        "processing",
+        "units",
+        "activation"
+      ],
+      "keywords_missing": [
+        "connections",
+        "weights"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.65,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is mostly correct. It answers the question and provides accurate information about the requirements for Parallel Distributed Processing (PDP) as per the book. However, it misses a key detail - weights or interconnections between units which are also crucial in PDP."
+    },
+    {
+      "test_case_id": "ch1_008",
+      "question": "What were the two theoretical misunderstandings that held back the field of neural networks?",
+      "category": "factual",
+      "answer": "The two misunderstandings were:\n\n1. **Misreading of the Perceptrons result:**  \n   Minsky and Papert showed that a *single-layer* perceptron cannot learn some simple functions (like XOR), but also noted that **multiple layers** could overcome this. The community largely absorbed only the first point (\u201cperceptrons can\u2019t do XOR\u201d) and concluded neural nets were fundamentally limited, effectively abandoning them for years.\n\n2. **Overreliance on the universal approximation theorem:**  \n   Theory showed that a network with just one hidden layer can approximate any function, leading many to think **one extra layer was sufficient in practice**. In reality, such shallow networks often had to be **enormous and computationally infeasible**. Researchers had already shown that **deeper networks (more layers)** are needed for practical, good performance, but this was not widely appreciated until much later.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.578
+        }
+      ],
+      "keywords_found": [
+        "minsky",
+        "papert",
+        "single",
+        "layer",
+        "xor"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.578,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer correctly identifies and explains the two key misunderstandings that hindered progress in the field of neural networks: 1) Misinterpretation of the limitations of Perceptrons as a result of Minsky and Papert's work, specifically regarding single-layer perceptrons being unable to learn some simple functions (like XOR); and 2) Overreliance on the universal approximation theorem, leading researchers to believe that one hidden layer was sufficient for practical purposes when in reality, deeper networks were required. The answer is complete and accurate."
+    },
+    {
+      "test_case_id": "ch1_009",
+      "question": "What is a GPU?",
+      "category": "factual",
+      "answer": "A GPU (Graphics Processing Unit), also known as a graphics card, is a special kind of processor designed to handle thousands of simple tasks in parallel, originally for rendering 3D graphics for games. Because these tasks are similar to the computations in neural networks, GPUs can run deep learning models hundreds of times faster than regular CPUs.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.591
+        }
+      ],
+      "keywords_found": [
+        "graphics",
+        "processing",
+        "unit",
+        "parallel"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.591,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The given answer is a perfect response to the question. It answers the question by defining what a GPU (Graphics Processing Unit) is and also explains its original purpose for rendering 3D graphics in games, as well as mentioning its increased efficiency for running deep learning models. The information provided is accurate and covers all key concepts expected."
+    },
+    {
+      "test_case_id": "ch1_010",
+      "question": "Why is it hard to use a traditional computer program to recognize images in a photo?",
+      "category": "conceptual",
+      "answer": "It\u2019s hard because, unlike tasks such as sorting a list, we don\u2019t know the explicit, step\u2011by\u2011step rules our brain uses to recognize objects in images. Recognizing a cat or a dog happens unconsciously in our visual system, so we can\u2019t easily write down precise instructions a traditional program could follow to do the same thing.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.623
+        }
+      ],
+      "keywords_found": [
+        "rules",
+        "explicit"
+      ],
+      "keywords_missing": [
+        "features",
+        "variations",
+        "steps"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.623,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer correctly identifies the main issue with traditional computer program image recognition, which is our inability to explicitly define the rules used by our brains for unconscious visual processing. However, it could have been more precise about the specific challenges such as variations and lack of explicit, step-by-step rules."
+    },
+    {
+      "test_case_id": "ch1_011",
+      "question": "What did Samuel mean by weight assignment?",
+      "category": "factual",
+      "answer": "Samuel used \u201cweight assignment\u201d to mean a particular choice of values for the model\u2019s weights\u2014i.e., for its adjustable variables (parameters). In other words, a weight assignment is one specific setting of all those weight values that determines how the program behaves.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.634
+        }
+      ],
+      "keywords_found": [
+        "variables",
+        "parameters",
+        "values"
+      ],
+      "keywords_missing": [
+        "choices"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.634,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer is correct and complete. It accurately describes the meaning of 'weight assignment' as defined by Arthur Samuel, covers the key concepts (variables, parameters, values, choices), and uses terminology relevant to the context."
+    },
+    {
+      "test_case_id": "ch1_012",
+      "question": "What term do we normally use in deep learning for what Samuel called weights?",
+      "category": "factual",
+      "answer": "We normally call them **model parameters** (or just **parameters**).",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.622
+        }
+      ],
+      "keywords_found": [
+        "parameters"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.622,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is correct and covers the key concept, even though it doesn't explicitly mention 'weights'. In deep learning, weights are indeed often referred to as 'model parameters', so the answer is still accurate."
+    },
+    {
+      "test_case_id": "ch1_013",
+      "question": "Why is it hard to understand why a deep learning model makes a particular prediction?",
+      "category": "conceptual",
+      "answer": "It\u2019s hard to understand why a deep learning model makes a particular prediction because:\n\n- The model learns complex patterns from data that are not directly human-interpretable.\n- It can only learn from the patterns present in the training data, and how those patterns combine in high-dimensional space is difficult to fully grasp.\n- All machine learning models, not just deep ones, can be challenging to fully understand\u2014especially how they will behave on data that is different from what they were trained on.\n\nThe context emphasizes that while there are tools to inspect models, fully explaining individual predictions and behavior on new kinds of data remains inherently difficult.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.595
+        }
+      ],
+      "keywords_found": [
+        "complex"
+      ],
+      "keywords_missing": [
+        "layers",
+        "parameters",
+        "black box",
+        "millions"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.595,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is mostly correct. It addresses the inherent difficulty in understanding why a deep learning model makes a particular prediction due to the complexity of learned patterns, the challenge of grasping how patterns combine in high-dimensional space, and the difficulty in predicting behavior on new data. However, it does not explicitly mention that deep learning models are often referred to as 'black boxes' or consist of layers with millions of parameters."
+    },
+    {
+      "test_case_id": "ch1_014",
+      "question": "What is the name of the theorem that shows that a neural network can solve any mathematical problem to any level of accuracy?",
+      "category": "factual",
+      "answer": "The theorem is called the **universal approximation theorem**.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.583
+        }
+      ],
+      "keywords_found": [
+        "universal",
+        "approximation"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.583,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer is completely correct. It not only answers the question asked (What is the name of the theorem that shows that a neural network can solve any mathematical problem to any level of accuracy?) but also provides the exact name of the theorem in question which is the universal approximation theorem."
+    },
+    {
+      "test_case_id": "ch1_015",
+      "question": "What do you need in order to train a model?",
+      "category": "factual",
+      "answer": "You need data (a dataset) in order to train a model.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.549
+        }
+      ],
+      "keywords_found": [
+        "data"
+      ],
+      "keywords_missing": [
+        "labels",
+        "architecture",
+        "loss"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.549,
+      "passed": false,
+      "error": null,
+      "llm_judgment": "FAIL",
+      "llm_score": 3,
+      "llm_reasoning": "The provided answer is partially correct as it mentions data, which is one of the key components required for training a model. However, it is missing the other necessary elements such as labels and the architecture of the model. Additionally, it does not explicitly mention the concept of loss function, though this is implied in the context since training involves minimizing the loss to make predictions more accurate."
+    },
+    {
+      "test_case_id": "ch1_016",
+      "question": "How could a feedback loop impact the rollout of a predictive policing model?",
+      "category": "conceptual",
+      "answer": "A feedback loop could cause the predictive policing model to become increasingly biased over time:\n\n1. The model is first trained on historical arrest data, so it is effectively predicting *where arrests have occurred*, not where crime actually happens. This already reflects existing policing biases (e.g., certain neighborhoods being more heavily policed).\n\n2. Police then use the model\u2019s predictions to decide where to concentrate patrols and enforcement.\n\n3. Because more officers are present in those predicted \u201chot spots,\u201d more arrests are made there\u2014whether or not actual crime rates are higher than in other areas.\n\n4. These new arrest records are then fed back into the training data for the next version of the model.\n\n5. The updated model \u201clearns\u201d that those areas are even more strongly associated with crime (really, with arrests), so it further intensifies its focus on them.\n\nOver repeated cycles, this positive feedback loop amplifies and entrenches the original bias: some communities are increasingly targeted, while others may be under-policed, even if their true crime rates are similar or higher.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.696
+        }
+      ],
+      "keywords_found": [
+        "bias",
+        "arrest",
+        "more"
+      ],
+      "keywords_missing": [
+        "reinforce"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.696,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer fully addresses the question asked about how a feedback loop could impact the rollout of a predictive policing model. It provides an accurate explanation of how bias can be amplified over time through repeated cycles in this system, and covers the key concepts of bias, arrest, reinforcement, and more."
+    },
+    {
+      "test_case_id": "ch1_017",
+      "question": "Do we always have to use 224x224 pixel images with the cat recognition model?",
+      "category": "factual",
+      "answer": "No. The example uses `Resize(224)` to match the 224\u00d7224 size that the pretrained model expects, but you are not required to always use 224\u00d7224 images in general.\n\nFor this specific pretrained model, fastai automatically resizes your input images to 224\u00d7224 before feeding them to the network. You could choose a different size (e.g., `Resize(192)` or `Resize(299)`) when you create your `DataLoaders`, but then the model architecture or its configuration would need to be compatible with that size.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.571
+        }
+      ],
+      "keywords_found": [
+        "no",
+        "different",
+        "size",
+        "resize"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.571,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is mostly correct and covers the key concepts, although it could be more concise. It answers the question by stating that while the model is currently using 224x224 images, it is not strictly required to do so. The information provided about fastai automatically resizing input images is accurate but missing some nuance, as the model's compatibility with different sizes depends on its architecture or configuration."
+    },
+    {
+      "test_case_id": "ch1_018",
+      "question": "What is the difference between classification and regression?",
+      "category": "factual",
+      "answer": "Classification predicts a **class/category** from a set of discrete options (e.g., \u201cdog\u201d vs \u201ccat\u201d or one of 37 breeds).\n\nRegression predicts **numeric quantities** (one or more real-valued numbers), such as a temperature or a geographic coordinate.\n\nIn other words:  \n- Classification \u2192 discrete labels  \n- Regression \u2192 continuous numbers",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.624
+        }
+      ],
+      "keywords_found": [
+        "discrete",
+        "continuous",
+        "class",
+        "number",
+        "predict"
+      ],
+      "keywords_missing": [
+        "categories"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.624,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer correctly distinguishes between classification and regression by accurately describing them as methods that predict either a discrete label (classification) or a continuous numerical value (regression), respectively. It also provides relevant examples to further clarify the differences."
+    },
+    {
+      "test_case_id": "ch1_019",
+      "question": "What is a validation set? What is a test set? Why do we need them?",
+      "category": "factual",
+      "answer": "A **validation set** is a portion of your labeled data that you *do not* train on, but that you repeatedly use during development to:\n\n- Monitor training and validation loss/accuracy  \n- Compare different models, architectures, and hyperparameters  \n- Decide when to stop training or which model version to keep  \n\nIt acts as your main feedback signal while you\u2019re iterating and experimenting.\n\nA **test set** is an additional, separate portion of data that you also never train on and ideally don\u2019t look at during model development. You only use it at the end to:\n\n- Get an unbiased estimate of how well your final model will perform on truly new, unseen data  \n- Keep yourself \u201cintellectually honest\u201d and avoid overfitting your choices to the validation set  \n\n**Why we need them:**\n\n- If you train on *all* your data and then evaluate on that same data, you can\u2019t tell whether the model has actually learned to generalize or just memorized the training examples.\n- A validation set lets you estimate performance and guide model improvements without contaminating training.\n- A test set provides a final, more trustworthy check, especially important because:\n  - Models naturally tend to \u201ccheat\u201d by memorizing patterns in the data.\n  - Humans naturally tend to fool themselves by tuning too much to whatever metric they\u2019re watching.\n- Having these reserved sets, representative of future data, is crucial to know how well your model will work in the real world and to evaluate external work (e.g., from third-party vendors).",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.598
+        }
+      ],
+      "keywords_found": [
+        "evaluate",
+        "overfitting",
+        "unseen"
+      ],
+      "keywords_missing": [
+        "generalization",
+        "measure"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.598,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer correctly explains the purpose of a validation set and a test set in machine learning. It accurately describes their roles during training, such as monitoring progress, comparing models, deciding when to stop training, and providing an unbiased estimate of performance on unseen data. The explanation also highlights why they are necessary: to avoid overfitting and to evaluate the model's ability to generalize, which is crucial for real-world applications."
+    },
+    {
+      "test_case_id": "ch1_020",
+      "question": "What will fastai do if you don't provide a validation set?",
+      "category": "factual",
+      "answer": "If you don\u2019t provide a validation set, fastai will automatically create one for you, using a default of 20% of the data as the validation set (`valid_pct=0.2`).",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.601
+        }
+      ],
+      "keywords_found": [
+        "automatically",
+        "create",
+        "20"
+      ],
+      "keywords_missing": [
+        "random",
+        "split"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.601,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer correctly explains that fastai will automatically create a validation set by default, and it is using the right percentage (20%). However, it could have been more specific about how fastai performs this random split."
+    },
+    {
+      "test_case_id": "ch1_021",
+      "question": "Can we always use a random sample for a validation set? Why or why not?",
+      "category": "conceptual",
+      "answer": "No, we can\u2019t always use a random sample for a validation set.\n\nA random split is fine for many problems, but it fails in important cases like time series or other situations where data has an order or structure that matters. For example, with time series data:\n\n- A random subset is **too easy**: the model can \u201cpeek\u201d at both earlier and later dates around the point it\u2019s predicting, which doesn\u2019t reflect real future use.\n- It\u2019s **not representative** of production: in practice, you\u2019ll train on past data and predict on future data, so your validation set should mimic that by using a **continuous block of the latest dates** (e.g., last month) as validation.\n\nMore generally, validation (and test) sets must be **representative of the new data you\u2019ll see in the future**. Sometimes that means you need to split by time, by user, by group, or other structure\u2014not just randomly sample.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.58
+        }
+      ],
+      "keywords_found": [
+        "no",
+        "time",
+        "series"
+      ],
+      "keywords_missing": [
+        "similar",
+        "leak"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.58,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer is correct and comprehensive. It clearly explains why a random sample may not be suitable for a validation set, especially in cases of time series data where the order or structure matters. The answer highlights that using a random subset can create an easy situation for the model, lead to lack of representation, and fail to mimic production scenarios. Additionally, it emphasizes that the validation set should represent future data, which may require splitting by different factors like time, user, group, etc. The key concepts are covered well, though not using the exact keywords, but the explanation is clear enough for understanding."
+    },
+    {
+      "test_case_id": "ch1_022",
+      "question": "What is overfitting? Provide an example.",
+      "category": "conceptual",
+      "answer": "Overfitting is when a model learns the training data too specifically\u2014essentially memorizing it\u2014instead of learning general patterns that work well on new, unseen data. As a result, it performs very well on the training set but poorly on new data (e.g., the validation set).\n\nExample:  \nSuppose you train a model on some noisy data generated from the function \\(y = x^2\\). If you let the model become very complex and train it for too long, it may fit every little fluctuation in the training points exactly. On those training points, its predictions are very accurate. But for new \\(x\\) values outside the range of the training data, its predictions are wildly wrong, because it learned to \u201cmemorize\u201d the specific training examples instead of the true underlying pattern \\(y = x^2\\).",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.638
+        }
+      ],
+      "keywords_found": [
+        "memorize",
+        "training",
+        "validation"
+      ],
+      "keywords_missing": [
+        "generalize",
+        "worse"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.638,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer correctly defines overfitting in the context of machine learning models and provides an example to illustrate it. It explains how a model may learn the specific details of the training data rather than general patterns, leading to good performance on the training set but poor performance on unseen data. The answer is complete and accurate."
+    },
+    {
+      "test_case_id": "ch1_023",
+      "question": "What is a metric? How does it differ from loss?",
+      "category": "factual",
+      "answer": "A metric is a function that measures how good the model\u2019s predictions are on the **validation set**, and is intended for **human consumption** (it\u2019s what you look at to judge model quality, e.g., accuracy or error rate).\n\nIt differs from loss in two key ways:\n- **Purpose**:  \n  - **Loss** is used to *train* the model via stochastic gradient descent (it must be differentiable and suitable for optimization).  \n  - **Metric** is used to *evaluate* the model\u2019s performance in a way that\u2019s easy for humans to interpret.\n- **Usage**:  \n  - **Loss** is computed on training (and often validation) data and its gradient updates the model\u2019s parameters.  \n  - **Metric** is computed on the **validation set only** and does *not* drive weight updates; it\u2019s just reported at the end of each epoch.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.626
+        }
+      ],
+      "keywords_found": [
+        "human",
+        "performance",
+        "optimization",
+        "gradient",
+        "measure"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.626,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer is both correct and complete. It accurately explains the difference between a metric and loss by highlighting their purpose (training vs evaluation), their usage (driving optimization versus human consumption), and provides examples of each (accuracy/error rate for metrics, stochastic gradient descent for loss). The answer uses different words than expected keywords but still covers the key concepts."
+    },
+    {
+      "test_case_id": "ch1_024",
+      "question": "How can pretrained models help?",
+      "category": "conceptual",
+      "answer": "Pretrained models help by:\n\n- Giving you a model that already knows useful low-level features (like edges, gradients, colors) and richer visual patterns before seeing your data.  \n- Letting you remove and replace just the final \u201chead\u201d layer(s) to match your specific task, instead of training everything from scratch.  \n- Allowing you to train more accurate models faster, with less data, time, and compute (since most layers are already well-trained).  \n- Enabling transfer learning: you can adapt a model trained on one large dataset (e.g., ImageNet) to many different tasks, even in other domains where data is scarce.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.645
+        }
+      ],
+      "keywords_found": [
+        "transfer",
+        "learning",
+        "less",
+        "data",
+        "faster",
+        "features"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.645,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer is correct and complete. It answers the question by explaining how pretrained models help in terms of giving initial features, allowing for the replacement of just the final layers, training more accurate models faster with less data and resources, and enabling transfer learning across different tasks and domains."
+    },
+    {
+      "test_case_id": "ch1_025",
+      "question": "What is the head of a model?",
+      "category": "factual",
+      "answer": "The head of a model is the final part that you newly add and train specifically for your new dataset\u2014typically one or more layers with randomized weights that replace the original classification part of a pretrained network.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.423
+        }
+      ],
+      "keywords_found": [
+        "final",
+        "layer",
+        "specific"
+      ],
+      "keywords_missing": [
+        "task",
+        "replaced",
+        "output"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.423,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is mostly accurate and covers the key concepts of a model head. However, it does not explicitly mention that the head outputs the final prediction, which is a minor detail."
+    },
+    {
+      "test_case_id": "ch1_026",
+      "question": "What kinds of features do the early layers of a CNN find? How about the later layers?",
+      "category": "factual",
+      "answer": "Early layers of a CNN learn very simple, low\u2011level visual features, such as:\n\n- Edges (horizontal, vertical, diagonal)  \n- Simple gradients  \n- Basic color and texture patterns  \n\nThese are the \u201cbasic building blocks\u201d for vision.\n\nLater layers combine these simple patterns into higher\u2011level, more semantic features, such as:\n\n- Corners, circles, and repeating line patterns (mid layers)  \n- Object parts and meaningful components like car wheels, text, flower petals (deeper layers)  \n- Eventually, whole high\u2011level concepts or objects in the last layers.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.69
+        }
+      ],
+      "keywords_found": [
+        "edge",
+        "gradient",
+        "simple",
+        "pattern",
+        "object"
+      ],
+      "keywords_missing": [
+        "complex"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.69,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer is both complete and accurate. It correctly describes the features found in early and later layers of a CNN, explaining how they move from low-level visual features like edges, gradients, basic color patterns to higher-level, more semantic features such as repeating line patterns, object parts, meaningful components, and eventually high-level concepts or objects. The answer adequately addresses the question asked."
+    },
+    {
+      "test_case_id": "ch1_027",
+      "question": "Are image models useful only for photos?",
+      "category": "factual",
+      "answer": "No. The context explicitly says image recognizers are not limited to ordinary photos.\n\nKey points from the text:\n- \u201cAn image recognizer can, as its name suggests, only recognize images. But a lot of things can be represented as images, which means that an image recognizer can learn to complete many tasks.\u201d\n- Examples given:\n  - **Audio**: Sounds can be turned into **spectrograms** (time\u2013frequency plots), then analyzed by image models.\n  - **Malware**: Code or binaries can be visualized as images; different malware types \u201clook very distinctive to the human eye,\u201d and image-based models achieved state-of-the-art malware classification.\n- A rule of thumb from the text: if humans can distinguish categories from an image representation of the data, then a deep learning image model likely can as well.\n\nSo image models are broadly useful for any problem where you can encode the data as images, not just for photos.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.467
+        }
+      ],
+      "keywords_found": [
+        "no",
+        "sound"
+      ],
+      "keywords_missing": [
+        "time series",
+        "tabular",
+        "convert"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.467,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is partially correct as it correctly states that image models are not limited to ordinary photos. However, the answer could be more specific and mention that image models can be used for non-image data such as audio (converted into spectrograms) and malware (code or binaries visualized as images). Although it correctly covers the key concepts, it could benefit from using the expected keywords 'sound' and 'time series'."
+    },
+    {
+      "test_case_id": "ch1_028",
+      "question": "What is an architecture?",
+      "category": "factual",
+      "answer": "An architecture is the template or design of a model\u2014the specific mathematical structure that defines how input data flows through layers and operations to produce predictions. It\u2019s the general form of the model before its parameters (weights) are learned.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.313
+        }
+      ],
+      "keywords_found": [
+        "template",
+        "structure",
+        "layers",
+        "mathematical"
+      ],
+      "keywords_missing": [
+        "function"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.313,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The provided answer correctly defines the architecture of a neural network as the mathematical structure and design, which includes input data flow through layers. However, it misses mentioning the specific term 'operations', though it is implied by 'layers'."
+    },
+    {
+      "test_case_id": "ch1_029",
+      "question": "What is segmentation?",
+      "category": "factual",
+      "answer": "Segmentation is creating a model that recognizes the content of **every individual pixel in an image**, assigning each pixel to a class (e.g., road, car, pedestrian, tree).",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.391
+        }
+      ],
+      "keywords_found": [
+        "pixel",
+        "image"
+      ],
+      "keywords_missing": [
+        "classify",
+        "region",
+        "label"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.391,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is mostly correct, it answers the question about image segmentation and mentions the key concept of classifying each pixel in an image. However, it misses some minor details like 'region', 'label', which can also be associated with image segmentation but were not explicitly mentioned."
+    },
+    {
+      "test_case_id": "ch1_030",
+      "question": "What is y_range used for? When do we need it?",
+      "category": "factual",
+      "answer": "`y_range` is used to tell fastai the valid range of the target values when you are doing **regression** (predicting a continuous number, not a category).\n\nIn the context above, the model predicts movie ratings between **0.5 and 5.0**, and the average error is about 0.6. Because the output is a continuous value and must stay within that known range, you pass `y_range=(0.5, 5.0)` so that fastai:\n\n- Applies a suitable activation (usually a scaled sigmoid) to the final layer  \n- Ensures predictions are constrained to lie within that range\n\nYou need `y_range` when:\n\n- The task is regression (continuous output), **and**\n- The target variable has a **known, fixed minimum and maximum** (e.g., ratings from 0.5 to 5.0, percentages from 0 to 1, ages from 0 to 120, etc.)\n\nIf the context doesn\u2019t give a bounded range or you don\u2019t care about constraining predictions, you don\u2019t need to set `y_range`.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.285
+        }
+      ],
+      "keywords_found": [
+        "output",
+        "range",
+        "regression",
+        "continuous",
+        "predict"
+      ],
+      "keywords_missing": [],
+      "unwanted_found": [],
+      "retrieval_score": 0.285,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer correctly identifies that y_range is used in regression tasks when the target variable has a known and fixed minimum and maximum value. It accurately describes the purpose of y_range, which includes applying a suitable activation to the final layer and ensuring predictions are constrained within the specified range. The key concepts of output, range, regression, continuous, predict are covered in the answer."
+    },
+    {
+      "test_case_id": "ch1_031",
+      "question": "What are hyperparameters?",
+      "category": "factual",
+      "answer": "Hyperparameters are higher-level settings that you, the modeler, choose *about* how the model is trained, rather than values the model learns itself.\n\nThey are \u201cparameters about parameters\u201d: choices that govern how the weight parameters are learned and how the model is set up (for example, learning rate, number of epochs, model architecture, etc.). These are not updated by training; instead, you pick and adjust them outside the normal training loop.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.535
+        }
+      ],
+      "keywords_found": [
+        "parameters",
+        "learning rate",
+        "setting"
+      ],
+      "keywords_missing": [
+        "chosen",
+        "not learned"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.535,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The answer is both accurate and complete. It correctly identifies that hyperparameters are settings chosen by the modeler about how a machine learning model is trained, and not values learned by the model itself. The information provided covers the key concepts of being 'parameters about parameters' and being 'choices that govern how the weight parameters are learned.' It also provides examples like learning rate, number of epochs, and model architecture, which are common hyperparameters."
+    },
+    {
+      "test_case_id": "ch1_032",
+      "question": "What's the best way to avoid failures when using AI in an organization?",
+      "category": "conceptual",
+      "answer": "The best way to avoid failures is to **really understand test and validation sets and use them correctly**\u2014especially by:\n\n- Holding out your own **test data** that external vendors never see  \n- Evaluating any model (including vendors\u2019) on that held\u2011out test set using a **metric that reflects what actually matters** to your organization  \n- Comparing results to a **simple baseline** you try yourself, so you can judge whether the model is truly adding value",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.623
+        }
+      ],
+      "keywords_found": [
+        "validation"
+      ],
+      "keywords_missing": [
+        "human",
+        "oversight",
+        "domain",
+        "expert",
+        "check"
+      ],
+      "unwanted_found": [],
+      "retrieval_score": 0.623,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 4,
+      "llm_reasoning": "The answer is mostly correct as it answers the question and provides valuable advice on avoiding failures in AI deployment. However, it doesn't explicitly mention human oversight, domain expertise, or regular checks which are important aspects of Responsible AI deployment."
+    },
+    {
+      "test_case_id": "ch1_unanswerable",
+      "question": "What is the capital of France?",
+      "category": "unanswerable",
+      "answer": "The context does not contain this information.\n\nThe capital of France is Paris.",
+      "sources": [
+        {
+          "document_id": "68a70c8a-834c-4217-8948-01b4e6b75cca",
+          "filename": "DLfastai.pdf",
+          "relevance_score": 0.203
+        }
+      ],
+      "keywords_found": [],
+      "keywords_missing": [],
+      "unwanted_found": [
+        "Paris"
+      ],
+      "retrieval_score": 0.203,
+      "passed": true,
+      "error": null,
+      "llm_judgment": "PASS",
+      "llm_score": 5,
+      "llm_reasoning": "The system correctly indicated that it doesn't have this information without providing the actual answer from its general knowledge."
+    }
+  ]
+}

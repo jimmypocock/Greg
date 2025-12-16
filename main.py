@@ -18,7 +18,7 @@ os.environ["HF_DATASETS_OFFLINE"] = "1"
 
 import uvicorn
 
-from src.api import create_app
+from apps.writer.app import create_app
 
 # Configure logging
 logging.basicConfig(

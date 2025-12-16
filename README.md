@@ -1,16 +1,29 @@
 # Greg
 
-A production-ready RAG (Retrieval-Augmented Generation) API for document Q&A with multi-provider LLM support.
+A modular creative writing platform with RAG (Retrieval-Augmented Generation) capabilities and multi-provider LLM support.
 
 ## Features
 
 - **Document Processing** - Upload PDFs, TXT, CSV, Markdown, Word, Excel, and images
+- **Style-Aware RAG** - Upload your own writing to inform AI completions
 - **Vector Search** - PostgreSQL + pgvector for semantic similarity search
 - **Multi-Provider LLMs** - Ollama (local/free), OpenAI, Anthropic, Google
 - **Real-time Progress** - WebSocket updates for document processing
 - **Authentication** - JWT access tokens + refresh tokens + API keys
 - **Cost Tracking** - Per-request logging with daily/monthly aggregation
 - **Background Jobs** - Async document processing with Redis + ARQ
+- **Modular Architecture** - Shared core with pluggable apps
+
+## Architecture
+
+```
+Greg/
+├── packages/core/       # Shared infrastructure (auth, database, LLM, jobs)
+├── apps/writer/         # Creative writing assistant app
+├── apps/vocal/          # Future vocal training app (planned)
+├── main.py              # Entry point (runs writer app)
+└── ...
+```
 
 ## Quick Start
 
@@ -151,7 +164,7 @@ uv run greg models
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/auth/register` | Register (first user = admin) |
-| POST | `/auth/login` | Login → access + refresh tokens |
+| POST | `/auth/login` | Login -> access + refresh tokens |
 | POST | `/auth/refresh` | Exchange refresh token for new tokens |
 | POST | `/auth/logout` | Revoke refresh token |
 | POST | `/auth/logout-all` | Revoke all sessions |
@@ -159,7 +172,7 @@ uv run greg models
 | GET | `/auth/sessions` | List active sessions |
 | DELETE | `/auth/sessions/{id}` | Revoke specific session |
 
-### Documents
+### Documents (Writer App)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -167,9 +180,9 @@ uv run greg models
 | POST | `/documents/url` | Process URL as document |
 | GET | `/documents` | List all documents |
 | DELETE | `/documents/{id}` | Delete document |
-| DELETE | `/documents` | Clear all (admin only) |
+| DELETE | `/admin/documents` | Clear all (admin only) |
 
-### Q&A
+### Q&A (Writer App)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -306,20 +319,53 @@ ollama pull llama2     # Alternative
 - **Anthropic**: `ANTHROPIC_API_KEY=sk-ant-...`
 - **Google**: `GOOGLE_API_KEY=...`
 
-## Architecture
+## Project Structure
 
 ```
-┌─────────────────┐     ┌──────────────────┐
-│  Client / App   │────▶│  FastAPI (8080)  │
-└─────────────────┘     └────────┬─────────┘
-                                 │
-        ┌────────────────────────┼────────────────────────┐
-        │                        │                        │
-        ▼                        ▼                        ▼
-┌───────────────┐    ┌───────────────────┐    ┌──────────────────┐
-│  PostgreSQL   │    │   Redis + ARQ     │    │     Ollama       │
-│  + pgvector   │    │  (Background Jobs)│    │  (Local LLMs)    │
-└───────────────┘    └───────────────────┘    └──────────────────┘
+Greg/
+├── packages/
+│   └── core/                    # Shared infrastructure
+│       ├── admin/              # Admin services
+│       ├── api/                # Core API (routes, middleware)
+│       │   └── routes/         # Auth, admin, jobs, costs, etc.
+│       ├── api_keys/           # API key management
+│       ├── auth/               # Authentication (FastAPI-Users + extensions)
+│       ├── config/             # Configuration
+│       ├── costs/              # Cost tracking
+│       ├── database/           # SQLAlchemy models & connection
+│       │   └── models/         # One model per file
+│       ├── jobs/               # Job infrastructure (queue, manager)
+│       ├── llm/                # LLM providers (Ollama, OpenAI, etc.)
+│       ├── security/           # Input sanitization
+│       ├── utils/              # Async I/O utilities
+│       └── websocket/          # WebSocket manager
+│
+├── apps/
+│   ├── writer/                  # Creative writing assistant
+│   │   ├── app.py              # App factory (extends core)
+│   │   ├── jobs/               # Document processing workers
+│   │   ├── routes/             # Writer-specific routes
+│   │   │   ├── admin/          # Document admin routes
+│   │   │   ├── ask.py          # Q&A endpoint
+│   │   │   ├── documents.py    # Document management
+│   │   │   ├── storage.py      # Storage stats
+│   │   │   └── web_search.py   # Web search
+│   │   └── services/           # Writer services
+│   │       ├── ask/            # Q&A service
+│   │       ├── documents/      # Document processing
+│   │       ├── rag/            # RAG query service
+│   │       ├── search/         # Web search
+│   │       ├── storage/        # Storage service
+│   │       └── vectorstore/    # pgvector integration
+│   │
+│   └── vocal/                   # Future vocal training app
+│
+├── alembic/                     # Database migrations
+├── tests/                       # Test suites
+├── docker-compose.yml           # PostgreSQL + Redis
+├── pyproject.toml               # Dependencies
+├── run.py                       # CLI entry point
+└── main.py                      # FastAPI application
 ```
 
 ### Database Tables
@@ -333,26 +379,6 @@ ollama pull llama2     # Alternative
 | `ai_requests` | LLM request logging + costs |
 | `documents` | Document metadata |
 | `document_chunks` | Text chunks + vector embeddings |
-
-### Project Structure
-
-```
-├── src/
-│   ├── api/            # FastAPI routes
-│   │   └── routes/     # Endpoint modules
-│   ├── auth/           # Authentication (JWT, refresh tokens, API keys)
-│   ├── costs/          # Cost tracking
-│   ├── database/       # SQLAlchemy models
-│   │   └── models/     # One model per file
-│   ├── jobs/           # Background workers (ARQ)
-│   └── websocket/      # WebSocket handlers
-├── alembic/            # Database migrations
-├── tests/              # Test suites
-├── docker-compose.yml  # PostgreSQL + Redis
-├── pyproject.toml      # Dependencies
-├── run.py              # CLI entry point
-└── main.py             # FastAPI application
-```
 
 ## Development
 
@@ -383,18 +409,39 @@ uv run alembic revision --autogenerate -m "add new table"
 uv run alembic downgrade -1
 ```
 
-### Adding a New Endpoint
+### Adding a Core Feature
 
-1. Create route file in `src/api/routes/`
-2. Add router to `src/api/app.py`
-3. Add auth as needed (`CurrentUser`, `AdminUser`)
+For shared functionality (auth, database, LLM):
 
-### Adding a Database Model
+1. Add code to `packages/core/<module>/`
+2. Export from `packages/core/<module>/__init__.py`
+3. Use in any app via `from packages.core.<module> import ...`
 
-1. Create model in `src/database/models/`
-2. Export from `src/database/models/__init__.py`
-3. Export from `src/database/__init__.py`
-4. Create migration: `uv run alembic revision --autogenerate -m "description"`
+### Adding an App Feature
+
+For app-specific functionality (writer routes, services):
+
+1. Add route in `apps/writer/routes/`
+2. Add service in `apps/writer/services/`
+3. Register route in `apps/writer/app.py`
+
+### Creating a New App
+
+```python
+# apps/newapp/app.py
+from packages.core.api.app import create_core_app
+from apps.newapp.routes import feature1, feature2
+
+def register_routes(app):
+    app.include_router(feature1.router)
+    app.include_router(feature2.router)
+
+def create_app():
+    return create_core_app(
+        title="New App",
+        extra_routes_registrar=register_routes,
+    )
+```
 
 ## WebSocket Usage
 
