@@ -15,6 +15,9 @@ class AgentTaskType(str, Enum):
     # Structure tasks
     STRUCTURE_ANALYSIS = "structure_analysis"
 
+    # Orchestrator tasks (conversational chat)
+    CHAT = "chat"
+
     # Lyricist tasks (future)
     WRITE_SECTION = "write_section"
     SUGGEST_LYRICS = "suggest_lyrics"

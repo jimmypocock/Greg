@@ -10,6 +10,7 @@ from uuid import UUID
 
 from apps.songwriter.agents.workflow import (
     run_critic_workflow,
+    run_orchestrator_workflow,
     TaskType,
     AgentEvent,
     AgentResult,
@@ -156,4 +157,100 @@ async def _run_agent_task_async(
         )
 
         # Fail the job
+        await job_manager.fail_job(task_id, str(e))
+
+
+async def run_chat_task(
+    song: Song,
+    user_message: str,
+    conversation_history: list[dict],
+    user_id: UUID,
+    llm: str | None = None,
+) -> str:
+    """
+    Run a chat task with the orchestrator agent.
+
+    Args:
+        song: The song context
+        user_message: The user's message
+        conversation_history: Previous conversation turns [{role, content}]
+        user_id: ID of the user running the task
+        llm: Optional LLM to use
+
+    Returns:
+        task_id that can be used to track progress via WebSocket
+    """
+    job = await job_manager.create_job(JobType.AGENT_TASK, user_id)
+    task_id = job.job_id
+
+    asyncio.create_task(
+        _run_chat_task_async(
+            task_id=task_id,
+            song=song,
+            user_message=user_message,
+            conversation_history=conversation_history,
+            llm=llm,
+        )
+    )
+
+    return task_id
+
+
+async def _run_chat_task_async(
+    task_id: str,
+    song: Song,
+    user_message: str,
+    conversation_history: list[dict],
+    llm: str | None,
+) -> None:
+    """Run the chat task asynchronously with streaming."""
+    try:
+        async def on_event(event: AgentEvent):
+            """Broadcast agent events to WebSocket subscribers."""
+            ws_event = {
+                "event": event.event_type,
+                "data": {
+                    "task_id": task_id,
+                    **event.data,
+                },
+                "timestamp": event.timestamp,
+            }
+            await connection_manager.broadcast_to_job(task_id, ws_event)
+
+        def sync_on_event(event: AgentEvent):
+            asyncio.create_task(on_event(event))
+
+        # Run the orchestrator workflow
+        result = await run_orchestrator_workflow(
+            song=song,
+            user_message=user_message,
+            conversation_history=conversation_history,
+            model=llm,
+            on_event=sync_on_event,
+        )
+
+        # Complete the job
+        await job_manager.complete_job(
+            task_id,
+            {
+                "success": result.success,
+                "result": result.result,
+                "duration_ms": result.duration_ms,
+                "input_tokens": result.input_tokens,
+                "output_tokens": result.output_tokens,
+                "total_cost_usd": str(result.total_cost_usd),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Chat task {task_id} failed: {e}")
+
+        await connection_manager.broadcast_to_job(
+            task_id,
+            {
+                "event": "agent.failed",
+                "data": {"task_id": task_id, "error": str(e)},
+            },
+        )
+
         await job_manager.fail_job(task_id, str(e))

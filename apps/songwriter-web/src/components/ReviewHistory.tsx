@@ -14,6 +14,7 @@ const taskTypeLabels: Record<AgentTaskType, string> = {
   [AgentTaskType.CHECK_CLICHES]: 'Cliche Check',
   [AgentTaskType.ANALYZE_RHYTHM]: 'Rhythm Analysis',
   [AgentTaskType.STRUCTURE_ANALYSIS]: 'Structure Analysis',
+  [AgentTaskType.CHAT]: 'Chat',
 };
 
 const taskTypeColors: Record<AgentTaskType, string> = {
@@ -22,6 +23,7 @@ const taskTypeColors: Record<AgentTaskType, string> = {
   [AgentTaskType.CHECK_CLICHES]: 'bg-purple-100 text-purple-800',
   [AgentTaskType.ANALYZE_RHYTHM]: 'bg-teal-100 text-teal-800',
   [AgentTaskType.STRUCTURE_ANALYSIS]: 'bg-green-100 text-green-800',
+  [AgentTaskType.CHAT]: 'bg-amber-100 text-amber-800',
 };
 
 export function ReviewHistory({ songId }: ReviewHistoryProps) {
@@ -30,11 +32,10 @@ export function ReviewHistory({ songId }: ReviewHistoryProps) {
 
   if (isLoading) {
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Review History</h3>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
         <div className="animate-pulse space-y-2">
-          <div className="h-10 bg-gray-100 rounded"></div>
-          <div className="h-10 bg-gray-100 rounded"></div>
+          <div className="h-10 bg-gray-100 dark:bg-gray-700 rounded"></div>
+          <div className="h-10 bg-gray-100 dark:bg-gray-700 rounded"></div>
         </div>
       </div>
     );
@@ -42,26 +43,24 @@ export function ReviewHistory({ songId }: ReviewHistoryProps) {
 
   if (error) {
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Review History</h3>
-        <p className="text-sm text-red-600">Failed to load history</p>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <p className="text-sm text-red-600 dark:text-red-400">Failed to load history</p>
       </div>
     );
   }
 
   if (!data || data.reviews.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Review History</h3>
-        <p className="text-sm text-gray-500">No reviews yet. Run an AI review above.</p>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400">No AI conversations yet. Use the chat panel to talk to your AI assistant.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-gray-900">Review History</h3>
+        <span className="text-xs text-gray-500 dark:text-gray-400">Past AI sessions</span>
         <span className="text-xs text-gray-500">
           Total cost: ${parseFloat(data.total_cost_usd).toFixed(4)}
         </span>

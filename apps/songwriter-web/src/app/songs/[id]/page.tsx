@@ -4,9 +4,10 @@ import { use, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines } from '@/lib/hooks';
-import { SplitPaneLayout } from '@/components/layout/SplitPaneLayout';
+import { ThreePaneLayout } from '@/components/layout/ThreePaneLayout';
 import { ToolboxPanel } from '@/components/toolbox/ToolboxPanel';
 import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
+import { AIChatPanel } from '@/components/chat/AIChatPanel';
 import { SongStatus, StructureSuggestion, SectionType } from '@/types';
 import { useUndoRedo } from '@/hooks/useUndoRedo';
 
@@ -34,6 +35,7 @@ export default function SongPage({ params }: PageProps) {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [suggestion, setSuggestion] = useState<StructureSuggestion | null>(null);
+  const [aiPanelOpen, setAiPanelOpen] = useState(true);
 
   // Undo/Redo support
   const { pushAction, undo, redo, canUndo, canRedo, isPerformingAction } = useUndoRedo();
@@ -317,6 +319,22 @@ export default function SongPage({ params }: PageProps) {
                 </svg>
               </button>
             </div>
+            {/* AI Assistant toggle */}
+            <button
+              onClick={() => setAiPanelOpen(!aiPanelOpen)}
+              className={`
+                p-1.5 rounded transition-colors
+                ${aiPanelOpen
+                  ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }
+              `}
+              title={aiPanelOpen ? 'Hide AI Assistant' : 'Show AI Assistant'}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+            </button>
             <button
               onClick={() => setShowDeleteConfirm(true)}
               className="px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
@@ -397,8 +415,8 @@ export default function SongPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Main Split Pane Layout */}
-      <SplitPaneLayout
+      {/* Main Three Pane Layout */}
+      <ThreePaneLayout
         leftPanel={
           <ToolboxPanel
             song={song}
@@ -426,13 +444,21 @@ export default function SongPage({ params }: PageProps) {
             }
           />
         }
-        rightPanel={
+        centerPanel={
           <LivePreviewPanel
             song={song}
             selectedSectionId={selectedSectionId}
             onSectionClick={setSelectedSectionId}
           />
         }
+        rightPanel={
+          <AIChatPanel
+            song={song}
+            onClose={() => setAiPanelOpen(false)}
+          />
+        }
+        rightPanelOpen={aiPanelOpen}
+        onRightPanelToggle={setAiPanelOpen}
       />
 
       {/* Delete Confirmation Modal */}

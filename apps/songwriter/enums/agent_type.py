@@ -10,3 +10,4 @@ class AgentType(str, Enum):
     LYRICIST = "lyricist"
     STRUCTURE = "structure"
     MELODY = "melody"
+    ORCHESTRATOR = "orchestrator"

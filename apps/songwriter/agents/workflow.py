@@ -33,6 +33,11 @@ from apps.songwriter.agents.critic import (
     RHYTHM_ANALYSIS_PROMPT,
     SECTION_REVIEW_PROMPT,
 )
+from apps.songwriter.agents.orchestrator import (
+    orchestrator_agent,
+    OrchestratorDependencies,
+    build_chat_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -276,3 +281,135 @@ def _estimate_cost(input_tokens: int, output_tokens: int, model: str | None) -> 
     output_cost = (Decimal(output_tokens) / 1000) * output_rate
 
     return input_cost + output_cost
+
+
+async def run_orchestrator_workflow(
+    song: Song,
+    user_message: str,
+    conversation_history: list[dict],
+    model: str | None = None,
+    on_event: Callable[[AgentEvent], None] | None = None,
+) -> AgentResult:
+    """
+    Run the orchestrator agent for conversational songwriting assistance.
+
+    Args:
+        song: The song context
+        user_message: The current user message
+        conversation_history: Previous conversation turns [{role, content}]
+        model: Optional model override
+        on_event: Callback for streaming events
+
+    Returns:
+        AgentResult with the response and metrics
+    """
+    start_time = time.time()
+
+    def emit(event_type: str, data: dict[str, Any]):
+        """Emit an event to the callback."""
+        event = AgentEvent(event_type=event_type, data=data)
+        if on_event:
+            on_event(event)
+
+    try:
+        emit("agent.started", {
+            "agent_name": "Songwriting Assistant",
+            "task_type": "chat",
+            "song_title": song.title,
+        })
+
+        # Build the prompt with conversation history
+        prompt = build_chat_prompt(user_message, conversation_history)
+
+        emit("agent.thinking", {"thought": "Thinking about your song..."})
+
+        # Create dependencies
+        deps = OrchestratorDependencies(
+            song=song,
+            conversation_history=conversation_history,
+        )
+
+        # Run the agent with streaming
+        result_text = ""
+        input_tokens = 0
+        output_tokens = 0
+        final_result = None
+
+        async for event in orchestrator_agent.run_stream_events(
+            prompt,
+            deps=deps,
+            model=model,
+        ):
+            event_kind = getattr(event, 'event_kind', None)
+
+            if event_kind == 'function_tool_call':
+                tool_name = event.part.tool_name if hasattr(event, 'part') else 'unknown'
+                emit("agent.tool.start", {"tool_name": tool_name})
+                emit("agent.thinking", {"thought": f"Using {tool_name}..."})
+
+            elif event_kind == 'function_tool_result':
+                tool_name = getattr(event.result, 'tool_name', 'unknown') if hasattr(event, 'result') else 'unknown'
+                content_preview = str(event.content)[:100] if hasattr(event, 'content') and event.content else "completed"
+                emit("agent.tool.end", {"tool_name": tool_name, "tool_output": content_preview})
+
+            elif event_kind == 'part_delta':
+                if hasattr(event, 'delta'):
+                    delta = event.delta
+                    text = getattr(delta, 'content_delta', '') or getattr(delta, 'content', '')
+                    if text:
+                        result_text += text
+                        emit("agent.chunk", {"text": text})
+
+            elif event_kind == 'part_start':
+                part = getattr(event, 'part', None)
+                if part:
+                    part_kind = getattr(part, 'part_kind', None)
+                    if part_kind == 'text' and hasattr(part, 'content'):
+                        text = part.content
+                        if text:
+                            result_text += text
+                            emit("agent.chunk", {"text": text})
+
+            elif event_kind == 'agent_run_result':
+                final_result = event.result
+                if hasattr(final_result, 'usage'):
+                    usage = final_result.usage()
+                    if usage:
+                        input_tokens = getattr(usage, 'request_tokens', 0) or 0
+                        output_tokens = getattr(usage, 'response_tokens', 0) or 0
+
+        if not result_text and final_result:
+            output = final_result.output if hasattr(final_result, 'output') else final_result
+            result_text = str(output)
+
+        duration_ms = int((time.time() - start_time) * 1000)
+        total_cost = _estimate_cost(input_tokens, output_tokens, model)
+
+        emit("agent.completed", {
+            "result": result_text[:500] + "..." if len(result_text) > 500 else result_text,
+            "duration_ms": duration_ms,
+        })
+
+        return AgentResult(
+            result=result_text,
+            success=True,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_cost_usd=total_cost,
+            duration_ms=duration_ms,
+            model=model or "openai:gpt-4o-mini",
+        )
+
+    except Exception as e:
+        duration_ms = int((time.time() - start_time) * 1000)
+        logger.error(f"Orchestrator workflow failed: {e}")
+
+        emit("agent.failed", {"error": str(e)})
+
+        return AgentResult(
+            result="",
+            success=False,
+            error_message=str(e),
+            duration_ms=duration_ms,
+            model=model or "openai:gpt-4o-mini",
+        )

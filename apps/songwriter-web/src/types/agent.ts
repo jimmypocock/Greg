@@ -7,6 +7,7 @@ export enum AgentType {
   LYRICIST = 'lyricist',
   STRUCTURE = 'structure',
   MELODY = 'melody',
+  ORCHESTRATOR = 'orchestrator',
 }
 
 export enum AgentTaskType {
@@ -15,6 +16,7 @@ export enum AgentTaskType {
   CHECK_CLICHES = 'check_cliches',
   ANALYZE_RHYTHM = 'analyze_rhythm',
   STRUCTURE_ANALYSIS = 'structure_analysis',
+  CHAT = 'chat',
 }
 
 // Response when starting an agent task (returns immediately)
@@ -124,5 +126,16 @@ export interface ReviewRequest {
 
 export interface SectionReviewRequest {
   section_index: number;
+  llm?: string;
+}
+
+export interface ChatMessageRequest {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatRequest {
+  message: string;
+  conversation_history: ChatMessageRequest[];
   llm?: string;
 }

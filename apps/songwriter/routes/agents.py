@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.songwriter.enums import AgentTaskType, AgentType
 from apps.songwriter.services.agent_review_store import AgentReviewStore
-from apps.songwriter.services.agent_runner import run_agent_task
+from apps.songwriter.services.agent_runner import run_agent_task, run_chat_task
 from apps.songwriter.services.db_store import SongDBStore
 from packages.core.database import get_session_dependency
 from packages.core.jobs import job_manager
@@ -70,6 +70,28 @@ class SectionReviewRequest(BaseModel):
 
     section_index: int = Field(..., ge=0, description="Index of the section to review (0-based)")
     llm: Optional[str] = None
+
+
+class ChatMessageRequest(BaseModel):
+    """A message in the conversation history."""
+
+    role: str = Field(..., pattern="^(user|assistant)$", description="Role: 'user' or 'assistant'")
+    content: str = Field(..., min_length=1, description="Message content")
+
+
+class ChatRequest(BaseModel):
+    """Request for conversational chat with the AI assistant."""
+
+    message: str = Field(..., min_length=1, max_length=2000, description="The user's message")
+    conversation_history: list[ChatMessageRequest] = Field(
+        default_factory=list,
+        max_length=20,  # Limit to prevent context abuse
+        description="Previous conversation turns (limited to last 20 messages)",
+    )
+    llm: Optional[str] = Field(
+        None,
+        description="LLM to use (e.g., 'ollama/mistral'). Uses default if not specified.",
+    )
 
 
 class AgentTaskResponse(BaseModel):
@@ -297,6 +319,57 @@ async def analyze_rhythm(
         song_id=song_id,
         song_title=song.title,
         task_type="analyze_rhythm",
+        websocket_url=f"/ws/jobs/{task_id}",
+    )
+
+
+@router.post("/{song_id}/chat", response_model=AgentTaskResponse, status_code=status.HTTP_202_ACCEPTED)
+async def chat_with_song(
+    song_id: UUID,
+    request: ChatRequest,
+    store: Annotated[SongDBStore, Depends(get_db_store)],
+):
+    """
+    Start a conversational chat session about the song.
+
+    The AI assistant will help with songwriting tasks while staying
+    focused on the current song. It has access to tools for analyzing
+    lyrics, structure, rhythm, and clichés.
+
+    Returns immediately with a task_id. Connect to the WebSocket
+    at /ws/jobs/{task_id} for real-time streaming responses.
+
+    Guardrails:
+    - Conversation is limited to songwriting topics
+    - History is limited to 20 messages to manage context
+    - Messages are limited to 2000 characters
+    """
+    song = await store.get(song_id)
+    if not song:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
+
+    logger.info(f"Starting chat for song '{song.title}' ({song_id})")
+
+    # Convert request history to dict format
+    conversation_history = [
+        {"role": msg.role, "content": msg.content}
+        for msg in request.conversation_history
+    ]
+
+    task_id = await run_chat_task(
+        song=song,
+        user_message=request.message,
+        conversation_history=conversation_history,
+        user_id=ANONYMOUS_USER_ID,
+        llm=request.llm,
+    )
+
+    return AgentTaskResponse(
+        task_id=task_id,
+        song_id=song_id,
+        song_title=song.title,
+        task_type="chat",
+        message="Chat started. Connect to WebSocket for streaming response.",
         websocket_url=f"/ws/jobs/{task_id}",
     )
 

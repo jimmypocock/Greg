@@ -9,6 +9,7 @@ import { get, post } from './api';
 import type {
   AgentTaskResponse,
   AgentType,
+  ChatRequest,
   ReviewHistoryResponse,
   ReviewRequest,
   SectionReviewRequest,
@@ -74,6 +75,27 @@ export async function analyzeRhythm(
  */
 export async function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
   return get<TaskStatusResponse>(`/agents/tasks/${taskId}`);
+}
+
+/**
+ * Start a conversational chat session about a song.
+ * Returns immediately with a task_id for tracking progress via WebSocket.
+ *
+ * The AI assistant helps with songwriting while staying focused on the song.
+ * Conversation history is limited to 20 messages.
+ */
+export async function chatWithSong(
+  songId: string,
+  message: string,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+  options: { llm?: string } = {}
+): Promise<AgentTaskResponse> {
+  const request: ChatRequest = {
+    message,
+    conversation_history: conversationHistory,
+    llm: options.llm,
+  };
+  return post<AgentTaskResponse, ChatRequest>(`/agents/${songId}/chat`, request);
 }
 
 /**
