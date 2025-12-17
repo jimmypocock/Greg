@@ -10,7 +10,11 @@ from pathlib import Path
 from uuid import UUID
 
 from apps.songwriter.enums import AnalysisStatus
-from apps.songwriter.services.audio_analysis import analyze_audio
+from apps.songwriter.services.audio_analysis import (
+    analyze_audio,
+    beats_to_json,
+    chords_to_json,
+)
 from apps.songwriter.services.audio_store import AudioFileStore
 from packages.core.database import get_session
 from packages.core.jobs import job_manager
@@ -96,6 +100,10 @@ async def _run_audio_analysis_async(
         if not result.success:
             raise Exception(result.error or "Analysis failed")
 
+        # Convert chords and beats to JSON for storage
+        chords_json = chords_to_json(result.chords) if result.chords else None
+        beats_json = beats_to_json(result.beat_positions) if result.beat_positions else None
+
         # Update database with results
         async with get_session() as session:
             audio_store = AudioFileStore(session)
@@ -106,6 +114,10 @@ async def _run_audio_analysis_async(
                 key=result.key,
                 key_confidence=result.key_confidence,
                 duration_seconds=result.duration_seconds,
+                time_signature=result.time_signature,
+                time_signature_confidence=result.time_signature_confidence,
+                detected_chords=chords_json,
+                beat_positions=beats_json,
             )
 
         # Broadcast completion
@@ -121,6 +133,10 @@ async def _run_audio_analysis_async(
                     "key": result.key,
                     "key_confidence": result.key_confidence,
                     "duration_seconds": result.duration_seconds,
+                    "time_signature": result.time_signature,
+                    "time_signature_confidence": result.time_signature_confidence,
+                    "chord_count": len(result.chords),
+                    "beat_count": len(result.beat_positions),
                 },
             },
         )
@@ -135,13 +151,18 @@ async def _run_audio_analysis_async(
                 "key": result.key,
                 "key_confidence": result.key_confidence,
                 "duration_seconds": result.duration_seconds,
+                "time_signature": result.time_signature,
+                "time_signature_confidence": result.time_signature_confidence,
+                "chord_count": len(result.chords),
+                "beat_count": len(result.beat_positions),
                 "success": True,
             },
         )
 
         logger.info(
             f"Audio analysis completed for {audio_file_id}: "
-            f"tempo={result.tempo}, key={result.key}"
+            f"tempo={result.tempo}, key={result.key}, time_sig={result.time_signature}, "
+            f"chords={len(result.chords)}, beats={len(result.beat_positions)}"
         )
 
     except Exception as e:

@@ -3,7 +3,7 @@
 import { use, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines, songKeys } from '@/lib/hooks';
+import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines, useAddChord, useRemoveChord, songKeys } from '@/lib/hooks';
 import { duplicateVersion, promoteVersion } from '@/lib/versions';
 import { useUploadAudio } from '@/lib/audioHooks';
 import { useQueryClient } from '@tanstack/react-query';
@@ -35,6 +35,8 @@ export default function SongPage({ params }: PageProps) {
   const deleteSectionMutation = useDeleteSection(resolvedParams.id);
   const reorderLines = useReorderLines(resolvedParams.id);
   const uploadAudio = useUploadAudio(resolvedParams.id);
+  const addChord = useAddChord(resolvedParams.id);
+  const removeChord = useRemoveChord(resolvedParams.id);
   const queryClient = useQueryClient();
 
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
@@ -67,6 +69,16 @@ export default function SongPage({ params }: PageProps) {
       sectionVersionId: versionId,
     });
   }, [uploadAudio]);
+
+  // Add chord to a line
+  const handleAddChord = useCallback(async (sectionId: string, lineId: string, chord: string, position: number) => {
+    await addChord.mutateAsync({ section_id: sectionId, line_id: lineId, chord, position });
+  }, [addChord]);
+
+  // Remove chord from a line
+  const handleRemoveChord = useCallback(async (sectionId: string, lineId: string, position: number) => {
+    await removeChord.mutateAsync({ section_id: sectionId, line_id: lineId, position });
+  }, [removeChord]);
 
   const handleUpdateSong = async (data: Parameters<typeof updateSong.mutateAsync>[0]) => {
     await updateSong.mutateAsync(data);
@@ -481,6 +493,9 @@ export default function SongPage({ params }: PageProps) {
             song={song}
             selectedSectionId={selectedSectionId}
             onSectionClick={setSelectedSectionId}
+            editable={true}
+            onAddChord={handleAddChord}
+            onRemoveChord={handleRemoveChord}
           />
         }
         rightPanel={

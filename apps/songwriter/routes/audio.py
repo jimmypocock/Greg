@@ -73,6 +73,14 @@ async def get_audio_store(
 
 # Response models
 
+class ChordDetection(BaseModel):
+    """A detected chord at a specific time range."""
+
+    start: float
+    end: float
+    chord: str
+
+
 class AudioFileResponse(BaseModel):
     """Response for an audio file."""
 
@@ -89,6 +97,9 @@ class AudioFileResponse(BaseModel):
     detected_time_signature: Optional[str]
     confidence_tempo: Optional[float]
     confidence_key: Optional[float]
+    confidence_time_signature: Optional[float]
+    detected_chords: Optional[list[ChordDetection]]
+    beat_positions: Optional[list[float]]
     analysis_status: AnalysisStatus
     analysis_error: Optional[str]
     is_reference: bool
@@ -96,6 +107,54 @@ class AudioFileResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_db(cls, audio_file) -> "AudioFileResponse":
+        """Create response from database model, parsing JSON fields."""
+        import json
+
+        # Parse chords JSON (may not exist if migration not run)
+        chords = None
+        detected_chords_raw = getattr(audio_file, 'detected_chords', None)
+        if detected_chords_raw:
+            try:
+                chords_data = json.loads(detected_chords_raw)
+                chords = [ChordDetection(**c) for c in chords_data]
+            except (json.JSONDecodeError, TypeError, KeyError):
+                chords = None
+
+        # Parse beats JSON (may not exist if migration not run)
+        beats = None
+        beat_positions_raw = getattr(audio_file, 'beat_positions', None)
+        if beat_positions_raw:
+            try:
+                beats = json.loads(beat_positions_raw)
+            except (json.JSONDecodeError, TypeError):
+                beats = None
+
+        return cls(
+            id=audio_file.id,
+            song_id=audio_file.song_id,
+            section_version_id=audio_file.section_version_id,
+            filename=audio_file.filename,
+            display_name=audio_file.display_name,
+            mime_type=audio_file.mime_type,
+            file_size_bytes=audio_file.file_size_bytes,
+            duration_seconds=audio_file.duration_seconds,
+            detected_tempo=audio_file.detected_tempo,
+            detected_key=audio_file.detected_key,
+            detected_time_signature=getattr(audio_file, 'detected_time_signature', None),
+            confidence_tempo=audio_file.confidence_tempo,
+            confidence_key=audio_file.confidence_key,
+            confidence_time_signature=getattr(audio_file, 'confidence_time_signature', None),
+            detected_chords=chords,
+            beat_positions=beats,
+            analysis_status=audio_file.analysis_status,
+            analysis_error=audio_file.analysis_error,
+            is_reference=audio_file.is_reference,
+            created_at=audio_file.created_at,
+            updated_at=audio_file.updated_at,
+        )
 
 
 class AudioFileListResponse(BaseModel):
@@ -214,7 +273,7 @@ async def upload_audio(
     audio_file = await audio_store.create(audio_file)
 
     return AudioUploadResponse(
-        audio_file=AudioFileResponse.model_validate(audio_file),
+        audio_file=AudioFileResponse.from_db(audio_file),
     )
 
 
@@ -244,7 +303,7 @@ async def list_audio_files(
     )
 
     return AudioFileListResponse(
-        audio_files=[AudioFileResponse.model_validate(af) for af in audio_files],
+        audio_files=[AudioFileResponse.from_db(af) for af in audio_files],
         total=len(audio_files),
     )
 
@@ -265,7 +324,7 @@ async def get_audio_file(
     if not audio_file or audio_file.song_id != song_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Audio file not found")
 
-    return AudioFileResponse.model_validate(audio_file)
+    return AudioFileResponse.from_db(audio_file)
 
 
 @router.put("/{audio_id}", response_model=AudioFileResponse)
@@ -301,7 +360,7 @@ async def update_audio_file(
         audio_file = await audio_store.update(audio_id, updates)
         logger.info(f"Updated audio file {audio_id}: {updates}")
 
-    return AudioFileResponse.model_validate(audio_file)
+    return AudioFileResponse.from_db(audio_file)
 
 
 @router.delete("/{audio_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -13,6 +13,7 @@ import {
   suggestStructure,
   applyStructure,
   addChord,
+  removeChord,
   addLine,
   updateLine,
   addSection,
@@ -26,6 +27,7 @@ import {
   SongCreateRequest,
   SongUpdateRequest,
   AddChordRequest,
+  RemoveChordRequest,
   AddLineRequest,
   UpdateLineRequest,
   AddSectionRequest,
@@ -135,8 +137,21 @@ export function useAddChord(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: AddChordRequest) => addChord(id, data),
-    onSuccess: (song) => {
-      queryClient.setQueryData(songKeys.detail(id), song);
+    onSuccess: () => {
+      // Force refetch to ensure UI updates properly
+      queryClient.invalidateQueries({ queryKey: songKeys.detail(id) });
+    },
+  });
+}
+
+// Remove chord
+export function useRemoveChord(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: RemoveChordRequest) => removeChord(id, data),
+    onSuccess: () => {
+      // Force refetch to ensure UI updates properly
+      queryClient.invalidateQueries({ queryKey: songKeys.detail(id) });
     },
   });
 }

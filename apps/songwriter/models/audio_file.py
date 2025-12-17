@@ -42,6 +42,13 @@ class AudioFile(SQLModel, table=True):
     detected_time_signature: Optional[str] = Field(default=None, max_length=10)
     confidence_tempo: Optional[float] = None
     confidence_key: Optional[float] = None
+    confidence_time_signature: Optional[float] = None
+
+    # Chord progression as JSON: [{"start": 0.0, "end": 2.5, "chord": "C"}, ...]
+    detected_chords: Optional[str] = None
+
+    # Beat positions as JSON: [0.5, 1.0, 1.5, 2.0, ...]
+    beat_positions: Optional[str] = None
 
     # Analysis status
     analysis_status: AnalysisStatus = Field(

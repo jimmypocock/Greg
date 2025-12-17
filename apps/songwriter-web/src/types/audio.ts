@@ -9,6 +9,12 @@ export enum AnalysisStatus {
   FAILED = 'failed',
 }
 
+export interface ChordDetection {
+  start: number;
+  end: number;
+  chord: string;
+}
+
 export interface AudioFile {
   id: string;
   song_id: string;
@@ -23,6 +29,9 @@ export interface AudioFile {
   detected_time_signature: string | null;
   confidence_tempo: number | null;
   confidence_key: number | null;
+  confidence_time_signature: number | null;
+  detected_chords: ChordDetection[] | null;
+  beat_positions: number[] | null;
   analysis_status: AnalysisStatus;
   analysis_error: string | null;
   is_reference: boolean;
@@ -82,5 +91,9 @@ export interface AudioEventData {
   key?: string;
   key_confidence?: number;
   duration_seconds?: number;
+  time_signature?: string;
+  time_signature_confidence?: number;
+  chord_count?: number;
+  beat_count?: number;
   error?: string;
 }

@@ -284,29 +284,81 @@ function AudioFileItem({
 
       {/* Analysis results */}
       {audioFile.analysis_status === AnalysisStatus.COMPLETED && (
-        <div className="flex items-center gap-4 text-sm">
-          {audioFile.detected_tempo && (
-            <div className="flex items-center gap-1">
-              <span className="text-gray-500 dark:text-gray-400">Tempo:</span>
-              <span className="font-medium text-gray-900 dark:text-gray-100">
-                {Math.round(audioFile.detected_tempo)} BPM
-              </span>
-              {audioFile.confidence_tempo && (
-                <span className="text-xs text-gray-400">
-                  ({Math.round(audioFile.confidence_tempo * 100)}%)
+        <div className="space-y-1">
+          {/* Primary analysis: Tempo, Key, Time Signature */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            {audioFile.detected_tempo && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-500 dark:text-gray-400">Tempo:</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {Math.round(audioFile.detected_tempo)} BPM
+                </span>
+                {audioFile.confidence_tempo && (
+                  <span className="text-xs text-gray-400">
+                    ({Math.round(audioFile.confidence_tempo * 100)}%)
+                  </span>
+                )}
+              </div>
+            )}
+            {audioFile.detected_key && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-500 dark:text-gray-400">Key:</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {audioFile.detected_key}
+                </span>
+                {audioFile.confidence_key && (
+                  <span className="text-xs text-gray-400">
+                    ({Math.round(audioFile.confidence_key * 100)}%)
+                  </span>
+                )}
+              </div>
+            )}
+            {audioFile.detected_time_signature && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-500 dark:text-gray-400">Time:</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {audioFile.detected_time_signature}
+                </span>
+                {audioFile.confidence_time_signature && (
+                  <span className="text-xs text-gray-400">
+                    ({Math.round(audioFile.confidence_time_signature * 100)}%)
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Extended analysis: Chords and Beats */}
+          {(audioFile.detected_chords?.length || audioFile.beat_positions?.length) && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+              {audioFile.detected_chords && audioFile.detected_chords.length > 0 && (
+                <span>
+                  {audioFile.detected_chords.length} chord{audioFile.detected_chords.length !== 1 ? 's' : ''} detected
+                </span>
+              )}
+              {audioFile.beat_positions && audioFile.beat_positions.length > 0 && (
+                <span>
+                  {audioFile.beat_positions.length} beats
                 </span>
               )}
             </div>
           )}
-          {audioFile.detected_key && (
-            <div className="flex items-center gap-1">
-              <span className="text-gray-500 dark:text-gray-400">Key:</span>
-              <span className="font-medium text-gray-900 dark:text-gray-100">
-                {audioFile.detected_key}
-              </span>
-              {audioFile.confidence_key && (
-                <span className="text-xs text-gray-400">
-                  ({Math.round(audioFile.confidence_key * 100)}%)
+
+          {/* Show first few chords as a preview */}
+          {audioFile.detected_chords && audioFile.detected_chords.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-1">
+              {audioFile.detected_chords.slice(0, 8).map((chord, i) => (
+                <span
+                  key={i}
+                  className="px-1.5 py-0.5 text-xs font-mono bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded"
+                  title={`${chord.start.toFixed(1)}s - ${chord.end.toFixed(1)}s`}
+                >
+                  {chord.chord}
+                </span>
+              ))}
+              {audioFile.detected_chords.length > 8 && (
+                <span className="px-1.5 py-0.5 text-xs text-gray-400">
+                  +{audioFile.detected_chords.length - 8} more
                 </span>
               )}
             </div>

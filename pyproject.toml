@@ -62,7 +62,7 @@ dependencies = [
     # Agent Framework (PydanticAI + LangGraph)
     "pydantic-ai>=0.0.40",
     "langgraph>=0.2.0",
-    # Audio Analysis
+    # Audio Analysis (madmom is optional, see [project.optional-dependencies])
     "librosa>=0.10.0",
     "soundfile>=0.13.0",
 ]
@@ -77,6 +77,8 @@ dev = [
     "httpx>=0.28.0",
     "ruff>=0.8.0",
 ]
+# Note: madmom requires manual installation due to Cython build dependency
+# See apps/songwriter/README.md for instructions
 
 [build-system]
 requires = ["hatchling"]

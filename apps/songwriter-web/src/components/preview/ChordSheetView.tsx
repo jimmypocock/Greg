@@ -8,12 +8,19 @@ interface ChordSheetViewProps {
   song: Song;
   selectedSectionId: string | null;
   onSectionClick?: (sectionId: string) => void;
+  /** Enable chord editing */
+  editable?: boolean;
+  onAddChord?: (sectionId: string, lineId: string, chord: string, position: number) => void;
+  onRemoveChord?: (sectionId: string, lineId: string, position: number) => void;
 }
 
 export function ChordSheetView({
   song,
   selectedSectionId,
   onSectionClick,
+  editable = false,
+  onAddChord,
+  onRemoveChord,
 }: ChordSheetViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -57,6 +64,9 @@ export function ChordSheetView({
             section={section}
             isSelected={section.id === selectedSectionId}
             onClick={onSectionClick ? () => onSectionClick(section.id) : undefined}
+            editable={editable}
+            onAddChord={onAddChord}
+            onRemoveChord={onRemoveChord}
           />
         ))}
       </div>

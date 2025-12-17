@@ -74,7 +74,7 @@ export async function addChord(id: string, data: AddChordRequest): Promise<Song>
 
 // Remove a chord from a line
 export async function removeChord(id: string, data: RemoveChordRequest): Promise<Song> {
-  return del(`/songs/${id}/chords`) as unknown as Promise<Song>;
+  return del<Song>(`/songs/${id}/chords`, data);
 }
 
 // Add a new line to a section

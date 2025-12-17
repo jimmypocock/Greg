@@ -96,6 +96,10 @@ class AudioFileStore:
         key: str | None,
         key_confidence: float | None,
         duration_seconds: float | None,
+        time_signature: str | None = None,
+        time_signature_confidence: float | None = None,
+        detected_chords: str | None = None,
+        beat_positions: str | None = None,
     ) -> AudioFile | None:
         """Update the analysis results of an audio file."""
         return await self.update(
@@ -106,6 +110,10 @@ class AudioFileStore:
                 "detected_key": key,
                 "confidence_key": key_confidence,
                 "duration_seconds": duration_seconds,
+                "detected_time_signature": time_signature,
+                "confidence_time_signature": time_signature_confidence,
+                "detected_chords": detected_chords,
+                "beat_positions": beat_positions,
                 "analysis_status": AnalysisStatus.COMPLETED,
                 "analysis_error": None,
             },

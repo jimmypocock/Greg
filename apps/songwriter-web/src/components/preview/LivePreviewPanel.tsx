@@ -9,6 +9,10 @@ interface LivePreviewPanelProps {
   selectedSectionId: string | null;
   onSectionClick?: (sectionId: string) => void;
   onPrint?: () => void;
+  /** Enable chord editing in preview */
+  editable?: boolean;
+  onAddChord?: (sectionId: string, lineId: string, chord: string, position: number) => void;
+  onRemoveChord?: (sectionId: string, lineId: string, position: number) => void;
 }
 
 export function LivePreviewPanel({
@@ -16,6 +20,9 @@ export function LivePreviewPanel({
   selectedSectionId,
   onSectionClick,
   onPrint,
+  editable = false,
+  onAddChord,
+  onRemoveChord,
 }: LivePreviewPanelProps) {
   const handlePrint = () => {
     if (onPrint) {
@@ -85,6 +92,9 @@ export function LivePreviewPanel({
           song={song}
           selectedSectionId={selectedSectionId}
           onSectionClick={onSectionClick}
+          editable={editable}
+          onAddChord={onAddChord}
+          onRemoveChord={onRemoveChord}
         />
       </div>
     </div>
