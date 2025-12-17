@@ -226,6 +226,7 @@ function AudioFileItem({
 
   const canAnalyze = audioFile.analysis_status === AnalysisStatus.PENDING ||
     audioFile.analysis_status === AnalysisStatus.FAILED;
+  const canReanalyze = audioFile.analysis_status === AnalysisStatus.COMPLETED;
   const canApply = audioFile.analysis_status === AnalysisStatus.COMPLETED &&
     (audioFile.detected_tempo || audioFile.detected_key);
 
@@ -380,6 +381,15 @@ function AudioFileItem({
             className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isAnalyzing ? 'Analyzing...' : 'Analyze'}
+          </button>
+        )}
+        {canReanalyze && (
+          <button
+            onClick={() => onAnalyze(audioFile.id)}
+            disabled={isAnalyzing}
+            className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isAnalyzing ? 'Analyzing...' : 'Re-analyze'}
           </button>
         )}
         {canApply && (

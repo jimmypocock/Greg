@@ -8,11 +8,14 @@ Extended analysis (time signature, chords, beats) requires madmom which is optio
 
 To install madmom:
     uv pip install Cython numpy
-    uv pip install madmom
+    uv pip install madmom --no-build-isolation
 """
 
+import collections
+import collections.abc
 import json
 import logging
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -20,16 +23,41 @@ from typing import Optional
 import librosa
 import numpy as np
 
+# Python 3.10+ compatibility fix for madmom
+# MutableSequence moved from collections to collections.abc
+if not hasattr(collections, 'MutableSequence'):
+    collections.MutableSequence = collections.abc.MutableSequence
+
+# NumPy 1.24+ compatibility fix for madmom
+# np.float, np.int, etc. were removed - suppress FutureWarnings for these
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", FutureWarning)
+    if not hasattr(np, 'float'):
+        np.float = np.float64
+    if not hasattr(np, 'int'):
+        np.int = np.int64
+    if not hasattr(np, 'complex'):
+        np.complex = np.complex128
+    if not hasattr(np, 'object'):
+        np.object = np.object_
+    if not hasattr(np, 'bool'):
+        np.bool = np.bool_
+    if not hasattr(np, 'str'):
+        np.str = np.str_
+
 logger = logging.getLogger(__name__)
 
 # Check if madmom is available
 try:
-    import madmom  # noqa: F401
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, module="madmom")
+        warnings.filterwarnings("ignore", category=DeprecationWarning, module="pkg_resources")
+        import madmom  # noqa: F401
     MADMOM_AVAILABLE = True
     logger.info("madmom is available - extended audio analysis enabled")
-except ImportError:
+except ImportError as e:
     MADMOM_AVAILABLE = False
-    logger.info("madmom not installed - using basic audio analysis only")
+    logger.info(f"madmom not available: {e} - using basic audio analysis only")
 
 # Key mapping for Krumhansl-Schmuckler algorithm
 KEY_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -155,6 +183,34 @@ def _detect_tempo(y: np.ndarray, sr: int) -> tuple[float, float]:
     return tempo, confidence
 
 
+def _convert_to_wav_for_madmom(file_path: Path) -> Path | None:
+    """
+    Convert audio file to WAV format for madmom compatibility.
+
+    Madmom has trouble loading m4a and some mp3 files without ffmpeg.
+    We use soundfile (via librosa) to convert to a temp wav file.
+
+    Returns:
+        Path to temp wav file, or None if conversion fails
+    """
+    import tempfile
+    import soundfile as sf
+
+    try:
+        # Load with librosa (handles many formats)
+        y, sr = librosa.load(file_path, sr=44100, mono=True)
+
+        # Write to temp wav file
+        temp_dir = Path(tempfile.gettempdir())
+        temp_wav = temp_dir / f"madmom_temp_{file_path.stem}.wav"
+        sf.write(str(temp_wav), y, sr)
+
+        return temp_wav
+    except Exception as e:
+        logger.warning(f"Failed to convert {file_path} to wav: {e}")
+        return None
+
+
 def _detect_time_signature_madmom(file_path: Path) -> tuple[str, float]:
     """
     Detect time signature using madmom's downbeat tracking.
@@ -168,6 +224,14 @@ def _detect_time_signature_madmom(file_path: Path) -> tuple[str, float]:
     if not MADMOM_AVAILABLE:
         return "4/4", 0.5  # Default with low confidence
 
+    # Convert to wav if needed (madmom struggles with m4a without ffmpeg)
+    wav_path = file_path
+    temp_wav = None
+    if file_path.suffix.lower() in ['.m4a', '.aac', '.mp4']:
+        temp_wav = _convert_to_wav_for_madmom(file_path)
+        if temp_wav:
+            wav_path = temp_wav
+
     try:
         from madmom.features.downbeats import DBNDownBeatTrackingProcessor, RNNDownBeatProcessor
 
@@ -176,7 +240,7 @@ def _detect_time_signature_madmom(file_path: Path) -> tuple[str, float]:
         dbn = DBNDownBeatTrackingProcessor(beats_per_bar=[3, 4], fps=100)
 
         # Process audio
-        activations = proc(str(file_path))
+        activations = proc(str(wav_path))
         downbeats = dbn(activations)
 
         if len(downbeats) < 4:
@@ -215,6 +279,13 @@ def _detect_time_signature_madmom(file_path: Path) -> tuple[str, float]:
     except Exception as e:
         logger.warning(f"madmom time signature detection failed: {e}")
         return "4/4", 0.5
+    finally:
+        # Clean up temp file
+        if temp_wav and temp_wav.exists():
+            try:
+                temp_wav.unlink()
+            except Exception:
+                pass
 
 
 def _detect_beats_madmom(file_path: Path) -> list[float]:
@@ -230,6 +301,14 @@ def _detect_beats_madmom(file_path: Path) -> list[float]:
     if not MADMOM_AVAILABLE:
         return []
 
+    # Convert to wav if needed (madmom struggles with m4a without ffmpeg)
+    wav_path = file_path
+    temp_wav = None
+    if file_path.suffix.lower() in ['.m4a', '.aac', '.mp4']:
+        temp_wav = _convert_to_wav_for_madmom(file_path)
+        if temp_wav:
+            wav_path = temp_wav
+
     try:
         from madmom.features.beats import DBNBeatTrackingProcessor, RNNBeatProcessor
 
@@ -238,7 +317,7 @@ def _detect_beats_madmom(file_path: Path) -> list[float]:
         dbn = DBNBeatTrackingProcessor(fps=100)
 
         # Process audio
-        activations = proc(str(file_path))
+        activations = proc(str(wav_path))
         beats = dbn(activations)
 
         # Return as list of floats
@@ -247,11 +326,121 @@ def _detect_beats_madmom(file_path: Path) -> list[float]:
     except Exception as e:
         logger.warning(f"madmom beat detection failed: {e}")
         return []
+    finally:
+        # Clean up temp file
+        if temp_wav and temp_wav.exists():
+            try:
+                temp_wav.unlink()
+            except Exception:
+                pass
+
+
+def _detect_chords_librosa(file_path: Path) -> list[ChordSegment]:
+    """
+    Detect chord progression using librosa's chroma features.
+
+    This is a simpler approach than madmom's deep learning but more compatible.
+    It uses chroma features and template matching for basic chord detection.
+
+    Args:
+        file_path: Path to audio file
+
+    Returns:
+        List of ChordSegment objects
+    """
+    try:
+        # Load audio
+        y, sr = librosa.load(file_path, sr=22050, mono=True)
+
+        # Compute chroma features
+        chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=512)
+
+        # Chord templates for major and minor chords
+        chord_templates = {}
+        chord_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+        for i, root in enumerate(chord_names):
+            # Major chord template (root, major 3rd, perfect 5th)
+            major = np.zeros(12)
+            major[i] = 1.0
+            major[(i + 4) % 12] = 0.8  # Major 3rd
+            major[(i + 7) % 12] = 0.9  # Perfect 5th
+            chord_templates[root] = major
+
+            # Minor chord template
+            minor = np.zeros(12)
+            minor[i] = 1.0
+            minor[(i + 3) % 12] = 0.8  # Minor 3rd
+            minor[(i + 7) % 12] = 0.9  # Perfect 5th
+            chord_templates[f'{root}m'] = minor
+
+        # Analyze each frame and find best matching chord
+        hop_duration = 512 / sr
+        segments = []
+        current_chord = None
+        current_start = 0.0
+
+        for frame_idx in range(chroma.shape[1]):
+            frame = chroma[:, frame_idx]
+            frame_time = frame_idx * hop_duration
+
+            # Find best matching chord
+            best_chord = None
+            best_score = 0.3  # Minimum threshold
+
+            for chord_name, template in chord_templates.items():
+                # Cosine similarity
+                score = np.dot(frame, template) / (np.linalg.norm(frame) * np.linalg.norm(template) + 1e-10)
+                if score > best_score:
+                    best_score = score
+                    best_chord = chord_name
+
+            # Track chord changes
+            if best_chord != current_chord:
+                if current_chord is not None and frame_time - current_start > 0.5:
+                    # Save previous chord segment (only if longer than 0.5s)
+                    segments.append(ChordSegment(
+                        start=round(current_start, 3),
+                        end=round(frame_time, 3),
+                        chord=current_chord,
+                    ))
+                current_chord = best_chord
+                current_start = frame_time
+
+        # Add final segment
+        if current_chord is not None:
+            final_time = chroma.shape[1] * hop_duration
+            if final_time - current_start > 0.5:
+                segments.append(ChordSegment(
+                    start=round(current_start, 3),
+                    end=round(final_time, 3),
+                    chord=current_chord,
+                ))
+
+        # Merge consecutive segments with same chord
+        merged = []
+        for seg in segments:
+            if merged and merged[-1].chord == seg.chord:
+                merged[-1] = ChordSegment(
+                    start=merged[-1].start,
+                    end=seg.end,
+                    chord=seg.chord,
+                )
+            else:
+                merged.append(seg)
+
+        return merged
+
+    except Exception as e:
+        logger.warning(f"librosa chord detection failed: {e}")
+        return []
 
 
 def _detect_chords_madmom(file_path: Path) -> list[ChordSegment]:
     """
     Detect chord progression using madmom's deep chroma chord recognition.
+
+    Falls back to librosa-based detection if madmom fails.
 
     Args:
         file_path: Path to audio file
@@ -260,7 +449,15 @@ def _detect_chords_madmom(file_path: Path) -> list[ChordSegment]:
         List of ChordSegment objects
     """
     if not MADMOM_AVAILABLE:
-        return []
+        return _detect_chords_librosa(file_path)
+
+    # Convert to wav if needed (madmom struggles with m4a without ffmpeg)
+    wav_path = file_path
+    temp_wav = None
+    if file_path.suffix.lower() in ['.m4a', '.aac', '.mp4']:
+        temp_wav = _convert_to_wav_for_madmom(file_path)
+        if temp_wav:
+            wav_path = temp_wav
 
     try:
         from madmom.features.chords import DeepChromaChordRecognitionProcessor
@@ -269,7 +466,7 @@ def _detect_chords_madmom(file_path: Path) -> list[ChordSegment]:
         proc = DeepChromaChordRecognitionProcessor()
 
         # Process audio - returns list of (start, end, chord) tuples
-        chords = proc(str(file_path))
+        chords = proc(str(wav_path))
 
         # Convert to ChordSegment objects
         segments = []
@@ -285,8 +482,15 @@ def _detect_chords_madmom(file_path: Path) -> list[ChordSegment]:
         return segments
 
     except Exception as e:
-        logger.warning(f"madmom chord detection failed: {e}")
-        return []
+        logger.warning(f"madmom chord detection failed: {e}, falling back to librosa")
+        return _detect_chords_librosa(file_path)
+    finally:
+        # Clean up temp file
+        if temp_wav and temp_wav.exists():
+            try:
+                temp_wav.unlink()
+            except Exception:
+                pass
 
 
 def is_extended_analysis_available() -> bool:

@@ -31,22 +31,27 @@ Uses **madmom** for more advanced detection:
 
 The `madmom` library provides extended audio analysis but requires special installation due to its Cython build dependency. It cannot be installed via `uv sync` because madmom doesn't declare Cython as a build dependency in its package metadata.
 
+**Note:** madmom is an older library that hasn't been updated for Python 3.10+ or NumPy 1.24+. The codebase includes compatibility shims to handle this automatically - you just need to install it correctly.
+
 ### Local Development
 
-**Important:** You must install in two steps - Cython first, then madmom.
+**Important:** You must install in two steps - Cython first, then madmom with `--no-build-isolation`.
 
 ```bash
 # Step 1: Install build dependencies into your environment
 uv pip install Cython numpy
 
-# Step 2: Install madmom (now Cython is available for the build)
-uv pip install madmom
+# Step 2: Install madmom (--no-build-isolation allows it to use the Cython you just installed)
+uv pip install madmom --no-build-isolation
 
 # Verify installation
-uv run python -c "import madmom; print('madmom installed successfully')"
+uv run python -c "
+from apps.songwriter.services.audio_analysis import MADMOM_AVAILABLE
+print(f'madmom available: {MADMOM_AVAILABLE}')
+"
 ```
 
-**Why two steps?** madmom's `setup.py` imports Cython at the top level, but doesn't declare it as a build dependency in `pyproject.toml`. This means the build fails unless Cython is already installed in the environment.
+**Why `--no-build-isolation`?** By default, pip/uv create isolated build environments. madmom's `setup.py` imports Cython at the top level, but doesn't declare it as a build dependency. Using `--no-build-isolation` lets the build use the Cython you already installed in your venv.
 
 ### Production (Docker)
 
@@ -54,8 +59,8 @@ uv run python -c "import madmom; print('madmom installed successfully')"
 # Install build dependencies first
 RUN pip install Cython numpy
 
-# Then install madmom
-RUN pip install madmom
+# Then install madmom with --no-build-isolation
+RUN pip install madmom --no-build-isolation
 
 # Install the rest of your app
 RUN pip install -e .
@@ -68,7 +73,7 @@ FROM python:3.12 AS builder
 
 # Install build deps and madmom
 RUN pip install Cython numpy
-RUN pip install madmom
+RUN pip install madmom --no-build-isolation
 
 FROM python:3.12-slim
 
