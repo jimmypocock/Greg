@@ -12,6 +12,7 @@ export enum AnalysisStatus {
 export interface AudioFile {
   id: string;
   song_id: string;
+  section_version_id: string | null;
   filename: string;
   display_name: string | null;
   mime_type: string;

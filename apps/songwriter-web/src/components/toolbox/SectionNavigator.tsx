@@ -18,10 +18,13 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Section, SectionType, Line } from '@/types';
+import { Section, SectionType, Line, SectionVersionSummary } from '@/types';
+import { useVersionAudioFiles, useDeleteAudio } from '@/lib/audioHooks';
+import type { AudioFile } from '@/types/audio';
 
 interface SectionNavigatorProps {
   sections: Section[];
+  songId: string;
   selectedSectionId: string | null;
   onSelectSection: (sectionId: string | null) => void;
   onReorderSections: (sectionIds: string[]) => void;
@@ -33,6 +36,12 @@ interface SectionNavigatorProps {
   onDeleteSection: (sectionId: string) => void;
   onUpdateSection: (sectionId: string, type: SectionType) => void;
   onAddSection?: () => void;
+  // Version props - selecting a version promotes it to main
+  onDuplicateVersion?: (sectionId: string, versionId: string) => void;
+  onSwitchVersion?: (sectionId: string, versionId: string) => void;
+  // Audio upload for version
+  onUploadVersionAudio?: (sectionId: string, versionId: string, file: File) => void;
+  isUploadingAudio?: boolean;
   isMutating?: boolean;
 }
 
@@ -63,6 +72,87 @@ const sectionColors: Record<SectionType, string> = {
   [SectionType.BREAKDOWN]: 'border-l-red-500',
   [SectionType.OTHER]: 'border-l-gray-400',
 };
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+
+// Simple audio player for version audio files
+function VersionAudioItem({ audioFile, songId }: { audioFile: AudioFile; songId: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const deleteAudio = useDeleteAudio(songId);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleDelete = async () => {
+    await deleteAudio.mutateAsync(audioFile.id);
+    setShowConfirm(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 py-1.5 px-2 bg-gray-50 dark:bg-gray-750 rounded text-xs">
+      <audio
+        ref={audioRef}
+        src={`${API_BASE_URL}/songs/${songId}/audio/${audioFile.id}/stream`}
+        preload="metadata"
+        onEnded={() => setIsPlaying(false)}
+      />
+      <button
+        onClick={togglePlay}
+        className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200"
+      >
+        {isPlaying ? (
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+          </svg>
+        ) : (
+          <svg className="w-3 h-3 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        )}
+      </button>
+      <span className="flex-1 truncate text-gray-600 dark:text-gray-300" title={audioFile.filename}>
+        {audioFile.display_name || audioFile.filename}
+      </span>
+      {showConfirm ? (
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleDelete}
+            disabled={deleteAudio.isPending}
+            className="px-1.5 py-0.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+          >
+            {deleteAudio.isPending ? '...' : 'Delete'}
+          </button>
+          <button
+            onClick={() => setShowConfirm(false)}
+            className="px-1.5 py-0.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowConfirm(true)}
+          className="p-1 text-gray-400 hover:text-red-500"
+          title="Delete"
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
 
 // Sortable Line Component
 interface SortableLineProps {
@@ -191,6 +281,7 @@ function SortableLine({
 
 interface SortableSectionProps {
   section: Section;
+  songId: string;
   lines: Line[]; // Optimistic lines state
   isExpanded: boolean;
   onToggle: () => void;
@@ -202,11 +293,18 @@ interface SortableSectionProps {
   onUpdateSection: (type: SectionType) => void;
   onReorderLines: (lineIds: string[], newLines: Line[]) => void;
   onOptimisticLineUpdate: (lineId: string, text: string) => void;
+  // Version props - selecting a version promotes it to main
+  onDuplicateVersion?: () => void;
+  onSwitchVersion?: (versionId: string) => void;
+  // Audio upload for version
+  onUploadAudio?: (file: File) => void;
+  isUploadingAudio?: boolean;
   isMutating?: boolean;
 }
 
 function SortableSection({
   section,
+  songId,
   lines,
   isExpanded,
   onToggle,
@@ -218,6 +316,10 @@ function SortableSection({
   onUpdateSection,
   onReorderLines,
   onOptimisticLineUpdate,
+  onDuplicateVersion,
+  onSwitchVersion,
+  onUploadAudio,
+  isUploadingAudio,
   isMutating,
 }: SortableSectionProps) {
   const {
@@ -237,6 +339,32 @@ function SortableSection({
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [isEditingType, setIsEditingType] = useState(false);
+  const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false);
+  const versionDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Get current (main) version info
+  const versions = section.versions || [];
+  const mainVersion = versions.find(v => v.is_main) || versions[0];
+  const mainVersionNumber = mainVersion?.version_number || 1;
+  const mainVersionId = mainVersion?.id;
+
+  // Fetch audio files for this version (only when expanded)
+  const { data: versionAudioData, isLoading: isLoadingAudio } = useVersionAudioFiles(
+    songId,
+    mainVersionId || ''
+  );
+  const versionAudioFiles = versionAudioData?.audio_files || [];
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (versionDropdownRef.current && !versionDropdownRef.current.contains(event.target as Node)) {
+        setIsVersionDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Track if we should auto-edit the next new line
   const shouldEditNewLine = useRef(false);
@@ -417,6 +545,91 @@ function SortableSection({
           </span>
         </div>
 
+        {/* Version Selector */}
+        {versions.length > 0 && (
+          <div className="relative mr-2" ref={versionDropdownRef}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsVersionDropdownOpen(!isVersionDropdownOpen);
+              }}
+              className="
+                flex items-center gap-1 px-2 py-0.5
+                text-xs font-medium
+                rounded border
+                transition-colors
+                bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600
+                hover:bg-gray-200 dark:hover:bg-gray-600
+              "
+              title="Switch version"
+            >
+              <span>v{mainVersionNumber}</span>
+              {versions.length > 1 && (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              )}
+            </button>
+
+            {/* Version Dropdown */}
+            {isVersionDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 min-w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1">
+                {/* Version List */}
+                {versions.map((version) => (
+                  <button
+                    key={version.id}
+                    className={`
+                      w-full px-3 py-2 text-left flex items-center justify-between
+                      ${version.is_main
+                        ? 'bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-750'
+                      }
+                    `}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!version.is_main && onSwitchVersion) {
+                        onSwitchVersion(version.id);
+                      }
+                      setIsVersionDropdownOpen(false);
+                    }}
+                    disabled={version.is_main}
+                  >
+                    <span className={`text-sm font-medium ${version.is_main ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-200'}`}>
+                      v{version.version_number}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {version.line_count} {version.line_count === 1 ? 'line' : 'lines'}
+                    </span>
+                  </button>
+                ))}
+
+                {/* Divider and Duplicate Button */}
+                {onDuplicateVersion && (
+                  <>
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDuplicateVersion();
+                        setIsVersionDropdownOpen(false);
+                      }}
+                      disabled={isMutating}
+                      className={`
+                        w-full px-3 py-2 text-left text-sm
+                        text-indigo-600 dark:text-indigo-400
+                        hover:bg-indigo-50 dark:hover:bg-indigo-900/30
+                        ${isMutating ? 'opacity-50 cursor-not-allowed' : ''}
+                      `}
+                    >
+                      + Duplicate to new version
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Delete Section Button */}
         <button
           onClick={(e) => {
@@ -484,24 +697,79 @@ function SortableSection({
               </DndContext>
             )}
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isMutating) {
-                onAddLine();
-              }
-            }}
-            disabled={isMutating}
-            className={`
-              mt-2 w-full py-1.5 text-xs
-              text-indigo-600 dark:text-indigo-400
-              hover:bg-indigo-50 dark:hover:bg-indigo-900/20
-              rounded transition-colors
-              ${isMutating ? 'cursor-not-allowed opacity-50' : ''}
-            `}
-          >
-            {isMutating ? 'Working...' : '+ Add Line'}
-          </button>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isMutating) {
+                  onAddLine();
+                }
+              }}
+              disabled={isMutating}
+              className={`
+                flex-1 py-1.5 text-xs
+                text-indigo-600 dark:text-indigo-400
+                hover:bg-indigo-50 dark:hover:bg-indigo-900/20
+                rounded transition-colors
+                ${isMutating ? 'cursor-not-allowed opacity-50' : ''}
+              `}
+            >
+              {isMutating ? 'Working...' : '+ Add Line'}
+            </button>
+
+            {/* Audio upload for this version */}
+            {onUploadAudio && (
+              <label
+                className={`
+                  flex items-center gap-1 px-2 py-1.5 text-xs
+                  text-gray-500 dark:text-gray-400
+                  hover:bg-gray-100 dark:hover:bg-gray-700
+                  rounded cursor-pointer transition-colors
+                  ${isUploadingAudio ? 'opacity-50 cursor-not-allowed' : ''}
+                `}
+                title="Upload audio snippet for this version"
+              >
+                <input
+                  type="file"
+                  accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/x-m4a,audio/mp4"
+                  className="hidden"
+                  disabled={isUploadingAudio}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      onUploadAudio(file);
+                      e.target.value = '';
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                {isUploadingAudio ? (
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                )}
+                <span>Audio</span>
+              </label>
+            )}
+          </div>
+
+          {/* Version audio files */}
+          {versionAudioFiles.length > 0 && (
+            <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-700 space-y-1">
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Audio snippets:</div>
+              {versionAudioFiles.map((audioFile) => (
+                <VersionAudioItem key={audioFile.id} audioFile={audioFile} songId={songId} />
+              ))}
+            </div>
+          )}
+          {isLoadingAudio && isExpanded && (
+            <div className="mt-2 text-xs text-gray-400 animate-pulse">Loading audio...</div>
+          )}
         </div>
       )}
     </div>
@@ -510,6 +778,7 @@ function SortableSection({
 
 export function SectionNavigator({
   sections,
+  songId,
   selectedSectionId,
   onSelectSection,
   onReorderSections,
@@ -521,6 +790,10 @@ export function SectionNavigator({
   onDeleteSection,
   onUpdateSection,
   onAddSection,
+  onDuplicateVersion,
+  onSwitchVersion,
+  onUploadVersionAudio,
+  isUploadingAudio,
   isMutating,
 }: SectionNavigatorProps) {
   // Local optimistic state for sections order
@@ -631,24 +904,32 @@ export function SectionNavigator({
           items={localSections.map((s) => s.id)}
           strategy={verticalListSortingStrategy}
         >
-          {localSections.map((section) => (
-            <SortableSection
-              key={section.id}
-              section={section}
-              lines={localLinesMap[section.id] || section.lines}
-              isExpanded={section.id === selectedSectionId}
-              onToggle={() => onSelectSection(section.id === selectedSectionId ? null : section.id)}
-              onUpdateLine={(lineId, text) => onUpdateLine(section.id, lineId, text)}
-              onAddLine={() => onAddLine(section.id)}
-              onAddLineWithText={(text) => onAddLineWithText(section.id, text)}
-              onDeleteLine={(lineId) => onDeleteLine(section.id, lineId)}
-              onDeleteSection={() => onDeleteSection(section.id)}
-              onUpdateSection={(type) => onUpdateSection(section.id, type)}
-              onReorderLines={(lineIds, newLines) => handleReorderLines(section.id, lineIds, newLines)}
-              onOptimisticLineUpdate={(lineId, text) => handleOptimisticLineUpdate(section.id, lineId, text)}
-              isMutating={isMutating}
-            />
-          ))}
+          {localSections.map((section) => {
+            const mainVersionId = section.main_version_id || section.versions?.[0]?.id;
+            return (
+              <SortableSection
+                key={section.id}
+                section={section}
+                songId={songId}
+                lines={localLinesMap[section.id] || section.lines}
+                isExpanded={section.id === selectedSectionId}
+                onToggle={() => onSelectSection(section.id === selectedSectionId ? null : section.id)}
+                onUpdateLine={(lineId, text) => onUpdateLine(section.id, lineId, text)}
+                onAddLine={() => onAddLine(section.id)}
+                onAddLineWithText={(text) => onAddLineWithText(section.id, text)}
+                onDeleteLine={(lineId) => onDeleteLine(section.id, lineId)}
+                onDeleteSection={() => onDeleteSection(section.id)}
+                onUpdateSection={(type) => onUpdateSection(section.id, type)}
+                onReorderLines={(lineIds, newLines) => handleReorderLines(section.id, lineIds, newLines)}
+                onOptimisticLineUpdate={(lineId, text) => handleOptimisticLineUpdate(section.id, lineId, text)}
+                onDuplicateVersion={onDuplicateVersion && mainVersionId ? () => onDuplicateVersion(section.id, mainVersionId) : undefined}
+                onSwitchVersion={onSwitchVersion ? (versionId) => onSwitchVersion(section.id, versionId) : undefined}
+                onUploadAudio={onUploadVersionAudio && mainVersionId ? (file) => onUploadVersionAudio(section.id, mainVersionId, file) : undefined}
+                isUploadingAudio={isUploadingAudio}
+                isMutating={isMutating}
+              />
+            );
+          })}
         </SortableContext>
       </DndContext>
 

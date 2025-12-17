@@ -373,7 +373,8 @@ function AudioFileItem({
 }
 
 export function AudioFilesPanel({ songId }: AudioFilesPanelProps) {
-  const { data, isLoading, error } = useAudioFiles(songId);
+  // Only show song-level audio files (not attached to any version)
+  const { data, isLoading, error } = useAudioFiles(songId, { songLevelOnly: true });
   const uploadAudio = useUploadAudio(songId);
   const analyzeAudio = useAnalyzeAudio(songId);
   const fileInputRef = useRef<HTMLInputElement>(null);

@@ -19,30 +19,58 @@ import type { AudioFile, AnalysisStatus, AudioEvent, UpdateAudioFileRequest } fr
 export const audioKeys = {
   all: ['audio'] as const,
   songAudio: (songId: string) => [...audioKeys.all, songId] as const,
+  songAudioFiltered: (songId: string, filter: string) => [...audioKeys.all, songId, filter] as const,
+  versionAudio: (songId: string, versionId: string) => [...audioKeys.all, songId, 'version', versionId] as const,
 };
 
 /**
- * Get all audio files for a song.
+ * Get audio files for a song (defaults to song-level only).
  */
-export function useAudioFiles(songId: string) {
+export function useAudioFiles(songId: string, options?: { sectionVersionId?: string; songLevelOnly?: boolean }) {
+  const filterKey = options?.sectionVersionId || (options?.songLevelOnly ? 'song-level' : 'all');
   return useQuery({
-    queryKey: audioKeys.songAudio(songId),
-    queryFn: () => getAudioFiles(songId),
+    queryKey: audioKeys.songAudioFiltered(songId, filterKey),
+    queryFn: () => getAudioFiles(songId, options),
     enabled: !!songId,
   });
 }
 
 /**
- * Upload an audio file.
+ * Get audio files for a specific section version.
+ */
+export function useVersionAudioFiles(songId: string, sectionVersionId: string) {
+  return useQuery({
+    queryKey: audioKeys.versionAudio(songId, sectionVersionId),
+    queryFn: () => getAudioFiles(songId, { sectionVersionId }),
+    enabled: !!songId && !!sectionVersionId,
+  });
+}
+
+/**
+ * Upload an audio file, optionally attached to a section version.
  */
 export function useUploadAudio(songId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ file, isReference }: { file: File; isReference?: boolean }) =>
-      uploadAudioFile(songId, file, isReference),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: audioKeys.songAudio(songId) });
+    mutationFn: ({
+      file,
+      isReference,
+      sectionVersionId,
+    }: {
+      file: File;
+      isReference?: boolean;
+      sectionVersionId?: string;
+    }) => uploadAudioFile(songId, file, isReference, sectionVersionId),
+    onSuccess: (_, variables) => {
+      // Invalidate all audio queries for this song
+      queryClient.invalidateQueries({ queryKey: audioKeys.all });
+      // Also invalidate the specific version if provided
+      if (variables.sectionVersionId) {
+        queryClient.invalidateQueries({
+          queryKey: audioKeys.versionAudio(songId, variables.sectionVersionId),
+        });
+      }
     },
   });
 }

@@ -37,12 +37,29 @@ class AudioFileStore:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_song(self, song_id: UUID) -> list[AudioFile]:
-        """Get all audio files for a song."""
+    async def get_by_song(
+        self,
+        song_id: UUID,
+        section_version_id: UUID | None = None,
+        song_level_only: bool = False,
+    ) -> list[AudioFile]:
+        """
+        Get audio files for a song with optional filtering.
+
+        Args:
+            song_id: The song to get audio files for
+            section_version_id: Filter to files attached to this version
+            song_level_only: If true, only return files with no version attached
+        """
+        query = select(AudioFile).where(AudioFile.song_id == song_id)
+
+        if section_version_id:
+            query = query.where(AudioFile.section_version_id == section_version_id)
+        elif song_level_only:
+            query = query.where(AudioFile.section_version_id.is_(None))
+
         result = await self.session.execute(
-            select(AudioFile)
-            .where(AudioFile.song_id == song_id)
-            .order_by(AudioFile.created_at.desc())
+            query.order_by(AudioFile.created_at.desc())
         )
         return list(result.scalars().all())
 

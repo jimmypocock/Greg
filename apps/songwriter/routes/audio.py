@@ -78,6 +78,7 @@ class AudioFileResponse(BaseModel):
 
     id: uuid.UUID
     song_id: uuid.UUID
+    section_version_id: Optional[uuid.UUID]
     filename: str
     display_name: Optional[str]
     mime_type: str
@@ -142,6 +143,7 @@ async def upload_audio(
     song_id: uuid.UUID,
     file: UploadFile = File(...),
     is_reference: bool = Form(False),
+    section_version_id: Optional[uuid.UUID] = Form(None),
     store: SongDBStore = Depends(get_db_store),
     audio_store: AudioFileStore = Depends(get_audio_store),
 ):
@@ -151,6 +153,9 @@ async def upload_audio(
     The file will be stored and can later be analyzed for tempo/key detection.
     If is_reference is True, the detected values will be automatically applied
     to the song metadata when analysis completes.
+
+    Optionally, attach the audio to a specific section version by providing
+    section_version_id. If not provided, the audio is song-level.
     """
     # Verify song exists
     song = await store.get(song_id)
@@ -197,6 +202,7 @@ async def upload_audio(
     # Create database record
     audio_file = AudioFile(
         song_id=song_id,
+        section_version_id=section_version_id,
         filename=file.filename or "audio",
         storage_path=str(storage_path),
         mime_type=content_type,
@@ -215,15 +221,27 @@ async def upload_audio(
 @router.get("/", response_model=AudioFileListResponse)
 async def list_audio_files(
     song_id: uuid.UUID,
+    section_version_id: Optional[uuid.UUID] = None,
+    song_level_only: bool = False,
     store: SongDBStore = Depends(get_db_store),
     audio_store: AudioFileStore = Depends(get_audio_store),
 ):
-    """List all audio files for a song."""
+    """
+    List audio files for a song.
+
+    Query params:
+    - section_version_id: Filter to audio files attached to this version
+    - song_level_only: If true, only return audio files with no version (song-level)
+    """
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
 
-    audio_files = await audio_store.get_by_song(song_id)
+    audio_files = await audio_store.get_by_song(
+        song_id,
+        section_version_id=section_version_id,
+        song_level_only=song_level_only,
+    )
 
     return AudioFileListResponse(
         audio_files=[AudioFileResponse.model_validate(af) for af in audio_files],

@@ -48,6 +48,27 @@ export interface Line {
   chords: ChordPlacement[];
 }
 
+export interface SectionVersionSummary {
+  id: string;
+  version_number: number;
+  name: string | null;
+  is_main: boolean;
+  line_count: number;
+}
+
+export interface SectionVersion {
+  id: string;
+  section_id: string;
+  version_number: number;
+  name: string | null;
+  is_main: boolean;
+  notes: string | null;
+  lines: Line[];
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Section {
   id: string;
   song_id: string;
@@ -55,6 +76,8 @@ export interface Section {
   number?: number;
   order: number;
   lines: Line[];
+  versions: SectionVersionSummary[];
+  main_version_id: string | null;
   notes?: string | null;
   created_at: string;
 }
@@ -224,4 +247,22 @@ export interface SongNotesListResponse {
 
 export interface ContextResponse {
   context: string;
+}
+
+// Section Version request/response types
+
+export interface CreateVersionRequest {
+  name?: string;
+  notes?: string;
+  duplicate_from_version_id?: string;
+}
+
+export interface UpdateVersionRequest {
+  name?: string;
+  notes?: string;
+}
+
+export interface VersionListResponse {
+  versions: SectionVersionSummary[];
+  total: number;
 }

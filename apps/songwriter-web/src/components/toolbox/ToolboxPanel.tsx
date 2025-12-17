@@ -22,6 +22,12 @@ interface ToolboxPanelProps {
   onReorderSections: (sectionIds: string[]) => Promise<void>;
   onReorderLines: (sectionId: string, lineIds: string[]) => Promise<void>;
   onAddSection: () => void;
+  // Version props - selecting a version promotes it to main
+  onDuplicateVersion?: (sectionId: string, versionId: string) => void;
+  onSwitchVersion?: (sectionId: string, versionId: string) => void;
+  // Audio upload for version
+  onUploadVersionAudio?: (sectionId: string, versionId: string, file: File) => void;
+  isUploadingAudio?: boolean;
   isUpdating?: boolean;
   isMutating?: boolean;
 }
@@ -39,6 +45,10 @@ export function ToolboxPanel({
   onReorderSections,
   onReorderLines,
   onAddSection,
+  onDuplicateVersion,
+  onSwitchVersion,
+  onUploadVersionAudio,
+  isUploadingAudio,
   isUpdating,
   isMutating,
   onAddLineWithText,
@@ -95,6 +105,7 @@ export function ToolboxPanel({
       >
         <SectionNavigator
           sections={song.sections}
+          songId={song.id}
           selectedSectionId={selectedSectionId}
           onSelectSection={onSelectSection}
           onReorderSections={onReorderSections}
@@ -106,6 +117,10 @@ export function ToolboxPanel({
           onDeleteSection={onDeleteSection}
           onUpdateSection={onUpdateSection}
           onAddSection={onAddSection}
+          onDuplicateVersion={onDuplicateVersion}
+          onSwitchVersion={onSwitchVersion}
+          onUploadVersionAudio={onUploadVersionAudio}
+          isUploadingAudio={isUploadingAudio}
           isMutating={isMutating}
         />
       </CollapsibleSection>

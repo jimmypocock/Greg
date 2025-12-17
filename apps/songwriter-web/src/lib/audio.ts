@@ -16,15 +16,20 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
 
 /**
  * Upload an audio file for a song.
+ * Optionally attach to a specific section version.
  */
 export async function uploadAudioFile(
   songId: string,
   file: File,
-  isReference: boolean = false
+  isReference: boolean = false,
+  sectionVersionId?: string
 ): Promise<AudioUploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('is_reference', isReference.toString());
+  if (sectionVersionId) {
+    formData.append('section_version_id', sectionVersionId);
+  }
 
   const response = await fetch(`${API_BASE_URL}/songs/${songId}/audio/`, {
     method: 'POST',
@@ -47,10 +52,24 @@ export async function uploadAudioFile(
 }
 
 /**
- * Get all audio files for a song.
+ * Get audio files for a song with optional filtering.
  */
-export async function getAudioFiles(songId: string): Promise<AudioFileListResponse> {
-  return get<AudioFileListResponse>(`/songs/${songId}/audio/`);
+export async function getAudioFiles(
+  songId: string,
+  options?: {
+    sectionVersionId?: string;
+    songLevelOnly?: boolean;
+  }
+): Promise<AudioFileListResponse> {
+  const params = new URLSearchParams();
+  if (options?.sectionVersionId) {
+    params.append('section_version_id', options.sectionVersionId);
+  }
+  if (options?.songLevelOnly) {
+    params.append('song_level_only', 'true');
+  }
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return get<AudioFileListResponse>(`/songs/${songId}/audio/${query}`);
 }
 
 /**

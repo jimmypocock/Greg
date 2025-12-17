@@ -3,7 +3,10 @@
 import { use, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines } from '@/lib/hooks';
+import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines, songKeys } from '@/lib/hooks';
+import { duplicateVersion, promoteVersion } from '@/lib/versions';
+import { useUploadAudio } from '@/lib/audioHooks';
+import { useQueryClient } from '@tanstack/react-query';
 import { ThreePaneLayout } from '@/components/layout/ThreePaneLayout';
 import { ToolboxPanel } from '@/components/toolbox/ToolboxPanel';
 import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
@@ -31,6 +34,8 @@ export default function SongPage({ params }: PageProps) {
   const deleteLine = useDeleteLine(resolvedParams.id);
   const deleteSectionMutation = useDeleteSection(resolvedParams.id);
   const reorderLines = useReorderLines(resolvedParams.id);
+  const uploadAudio = useUploadAudio(resolvedParams.id);
+  const queryClient = useQueryClient();
 
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -39,6 +44,29 @@ export default function SongPage({ params }: PageProps) {
 
   // Undo/Redo support
   const { pushAction, undo, redo, canUndo, canRedo, isPerformingAction } = useUndoRedo();
+
+  // Version handlers
+  const handleDuplicateVersion = useCallback(async (sectionId: string, versionId: string) => {
+    await duplicateVersion(resolvedParams.id, sectionId, versionId);
+    // Invalidate song query to refresh versions list
+    queryClient.invalidateQueries({ queryKey: songKeys.detail(resolvedParams.id) });
+  }, [resolvedParams.id, queryClient]);
+
+  // Switch version = promote it to main so it displays everywhere
+  const handleSwitchVersion = useCallback(async (sectionId: string, versionId: string) => {
+    await promoteVersion(resolvedParams.id, sectionId, versionId);
+    // Invalidate song query to refresh with new main version's lines
+    queryClient.invalidateQueries({ queryKey: songKeys.detail(resolvedParams.id) });
+  }, [resolvedParams.id, queryClient]);
+
+  // Upload audio file for a specific version
+  const handleUploadVersionAudio = useCallback(async (sectionId: string, versionId: string, file: File) => {
+    await uploadAudio.mutateAsync({
+      file,
+      isReference: false,
+      sectionVersionId: versionId,
+    });
+  }, [uploadAudio]);
 
   const handleUpdateSong = async (data: Parameters<typeof updateSong.mutateAsync>[0]) => {
     await updateSong.mutateAsync(data);
@@ -432,6 +460,10 @@ export default function SongPage({ params }: PageProps) {
             onReorderSections={handleReorderSections}
             onReorderLines={handleReorderLines}
             onAddSection={handleAddSection}
+            onDuplicateVersion={handleDuplicateVersion}
+            onSwitchVersion={handleSwitchVersion}
+            onUploadVersionAudio={handleUploadVersionAudio}
+            isUploadingAudio={uploadAudio.isPending}
             isUpdating={updateSong.isPending}
             isMutating={
               addLine.isPending ||

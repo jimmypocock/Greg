@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from apps.songwriter.routes import agents, audio, notes, songs
+from apps.songwriter.routes import agents, audio, notes, songs, versions
 from packages.core.api.routes.websocket import router as websocket_router
 from packages.core.database import close_database, init_database
 
@@ -47,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(notes.router)
     app.include_router(agents.router)
     app.include_router(audio.router)
+    app.include_router(versions.router)
     app.include_router(websocket_router)
 
     # Health check

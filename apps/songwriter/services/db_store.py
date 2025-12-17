@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from apps.songwriter.models import ChordPlacement, Line, Song, SongSection
+from apps.songwriter.models import ChordPlacement, Line, SectionVersion, Song, SongSection
 
 
 class SongDBStore:
@@ -21,7 +21,8 @@ class SongDBStore:
         """Get the query options to load all nested relationships."""
         return [
             selectinload(Song.sections)
-            .selectinload(SongSection.lines)
+            .selectinload(SongSection.versions)
+            .selectinload(SectionVersion.lines)
             .selectinload(Line.chords),
             selectinload(Song.song_notes),
         ]
@@ -72,13 +73,22 @@ class SongDBStore:
         return song
 
     async def add_section(self, song_id: UUID, section: SongSection) -> Optional[Song]:
-        """Add a section to a song."""
+        """Add a section to a song with a default version."""
         song = await self.get(song_id)
         if song is None:
             return None
 
         section.song_id = song_id
         section.order = len(song.sections)
+
+        # Create default version for the section
+        default_version = SectionVersion(
+            version_number=1,
+            name="Original",
+            is_main=True,
+        )
+        section.versions = [default_version]
+
         song.sections.append(section)
 
         song.updated_at = datetime.utcnow()
@@ -115,19 +125,43 @@ class SongDBStore:
         await self.session.commit()
         return True
 
-    async def add_line(self, section_id: UUID, line: Line) -> Optional[Line]:
-        """Add a line to a section."""
+    async def add_line(
+        self,
+        section_id: UUID,
+        line: Line,
+        version_id: Optional[UUID] = None,
+    ) -> Optional[Line]:
+        """Add a line to a section's version.
+
+        Args:
+            section_id: The section ID
+            line: The line to add
+            version_id: Optional version ID. If not provided, adds to main version.
+        """
+        # Get the section with versions
         result = await self.session.execute(
             select(SongSection)
-            .options(selectinload(SongSection.lines))
+            .options(
+                selectinload(SongSection.versions)
+                .selectinload(SectionVersion.lines)
+            )
             .where(SongSection.id == section_id)
         )
         section = result.scalar_one_or_none()
         if section is None:
             return None
 
-        line.section_id = section_id
-        line.order = len(section.lines)
+        # Find the target version
+        if version_id:
+            version = next((v for v in section.versions if v.id == version_id), None)
+        else:
+            version = section.main_version
+
+        if version is None:
+            return None
+
+        line.section_version_id = version.id
+        line.order = len(version.lines)
         self.session.add(line)
         await self.session.commit()
         await self.session.refresh(line)

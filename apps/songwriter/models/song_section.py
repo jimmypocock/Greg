@@ -11,6 +11,7 @@ from apps.songwriter.enums import SectionType
 
 if TYPE_CHECKING:
     from apps.songwriter.models.line import Line
+    from apps.songwriter.models.section_version import SectionVersion
     from apps.songwriter.models.song import Song
     from apps.songwriter.models.song_note import SongNote
 
@@ -45,15 +46,26 @@ class SongSection(SQLModel, table=True):
 
     # Relationships
     song: Optional["Song"] = Relationship(back_populates="sections")
-    lines: list["Line"] = Relationship(
+    versions: list["SectionVersion"] = Relationship(
         back_populates="section",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "Line.order"},
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "SectionVersion.version_number"},
     )
     notes_list: list["SongNote"] = Relationship(
         back_populates="section",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
 
+    @property
+    def main_version(self) -> Optional["SectionVersion"]:
+        """Get the main version of this section."""
+        return next((v for v in self.versions if v.is_main), None)
+
+    @property
+    def lines(self) -> list["Line"]:
+        """Get lines from the main version (for backward compatibility)."""
+        main = self.main_version
+        return main.lines if main else []
+
     def get_lyrics_text(self) -> str:
-        """Get all lyrics in this section as a single string."""
+        """Get all lyrics in this section as a single string (from main version)."""
         return "\n".join(line.text for line in self.lines)

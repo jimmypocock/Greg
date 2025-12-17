@@ -98,6 +98,18 @@ class LineResponse(BaseModel):
         )
 
 
+class SectionVersionSummary(BaseModel):
+    """Summary of a section version."""
+
+    id: UUID
+    version_number: int
+    name: Optional[str]
+    is_main: bool
+    line_count: int
+
+    model_config = {"from_attributes": True}
+
+
 class SongSectionResponse(BaseModel):
     """SongSection response for API."""
 
@@ -108,6 +120,8 @@ class SongSectionResponse(BaseModel):
     order: int
     notes: Optional[str]
     lines: list[LineResponse]
+    versions: list[SectionVersionSummary]
+    main_version_id: Optional[UUID]
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -115,8 +129,23 @@ class SongSectionResponse(BaseModel):
     @classmethod
     def from_section(cls, section: SongSection) -> "SongSectionResponse":
         """Convert a SongSection model to a response."""
-        # Sort lines by order to ensure proper display
-        sorted_lines = sorted(section.lines, key=lambda l: l.order)
+        # Get main version and its lines
+        main_version = section.main_version
+        lines = main_version.lines if main_version else []
+        sorted_lines = sorted(lines, key=lambda l: l.order)
+
+        # Build version summaries
+        version_summaries = [
+            SectionVersionSummary(
+                id=v.id,
+                version_number=v.version_number,
+                name=v.name,
+                is_main=v.is_main,
+                line_count=len(v.lines) if v.lines else 0,
+            )
+            for v in sorted(section.versions, key=lambda v: v.version_number)
+        ]
+
         return cls(
             id=section.id,
             song_id=section.song_id,
@@ -125,6 +154,8 @@ class SongSectionResponse(BaseModel):
             order=section.order,
             notes=section.notes,
             lines=[LineResponse.from_line(line) for line in sorted_lines],
+            versions=version_summaries,
+            main_version_id=main_version.id if main_version else None,
             created_at=section.created_at,
         )
 

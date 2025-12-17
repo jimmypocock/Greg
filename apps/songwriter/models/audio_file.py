@@ -2,12 +2,15 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Column, Enum, text
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 from apps.songwriter.enums import AnalysisStatus
+
+if TYPE_CHECKING:
+    from apps.songwriter.models.section_version import SectionVersion
 
 
 class AudioFile(SQLModel, table=True):
@@ -17,6 +20,11 @@ class AudioFile(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     song_id: uuid.UUID = Field(foreign_key="songs.id", index=True)
+
+    # Optional link to a specific section version (NULL = song-level audio)
+    section_version_id: Optional[uuid.UUID] = Field(
+        default=None, foreign_key="section_versions.id", index=True
+    )
 
     # File info
     filename: str = Field(max_length=255)  # Original filename
@@ -58,3 +66,6 @@ class AudioFile(SQLModel, table=True):
         default_factory=datetime.utcnow,
         sa_column_kwargs={"server_default": text("now()")},
     )
+
+    # Relationships
+    section_version: Optional["SectionVersion"] = Relationship(back_populates="audio_files")
