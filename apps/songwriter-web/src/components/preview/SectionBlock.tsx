@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Section, SectionType, Line, ChordPlacement } from '@/types';
 import { ChordEditor } from './ChordEditor';
 
@@ -14,6 +14,36 @@ interface SectionBlockProps {
   onAddChord?: (sectionId: string, lineId: string, chord: string, position: number) => void;
   /** Called when a chord is removed */
   onRemoveChord?: (sectionId: string, lineId: string, position: number) => void;
+}
+
+/**
+ * Hook to measure monospace character width accurately.
+ * Creates a hidden element to measure the width of a single character.
+ */
+function useCharWidth(containerRef: React.RefObject<HTMLDivElement | null>): number {
+  const [charWidth, setCharWidth] = useState(8); // Default fallback
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    // Create a hidden measuring element with the same font styles
+    const measureEl = document.createElement('span');
+    measureEl.style.position = 'absolute';
+    measureEl.style.visibility = 'hidden';
+    measureEl.style.whiteSpace = 'pre';
+    measureEl.style.font = 'inherit';
+    measureEl.textContent = '0'; // Use '0' as reference character for monospace
+
+    containerRef.current.appendChild(measureEl);
+    const width = measureEl.getBoundingClientRect().width;
+    containerRef.current.removeChild(measureEl);
+
+    if (width > 0) {
+      setCharWidth(width);
+    }
+  }, [containerRef]);
+
+  return charWidth;
 }
 
 const sectionLabels: Record<SectionType, string> = {
@@ -65,61 +95,60 @@ function EditableLineDisplay({ line, sectionId, onAddChord, onRemoveChord }: Edi
     existingChord?: ChordPlacement;
   } | null>(null);
 
+  const [hoverPosition, setHoverPosition] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
-  const chordLineRef = useRef<HTMLDivElement>(null);
+
+  // Get accurate character width for monospace font
+  const charWidth = useCharWidth(containerRef);
 
   // Find chord at a given position
   const findChordAtPosition = useCallback((pos: number): ChordPlacement | undefined => {
     return line.chords.find(c => pos >= c.position && pos < c.position + c.chord.length);
   }, [line.chords]);
 
-  // Handle click on the chord line area (above text)
-  const handleChordLineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  // Calculate character position from click/mouse event
+  const getCharPositionFromEvent = useCallback((e: React.MouseEvent<HTMLDivElement>): number => {
+    if (!containerRef.current) return 0;
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const clickX = e.clientX - containerRect.left;
+    const position = Math.max(0, Math.floor(clickX / charWidth));
+
+    return position;
+  }, [charWidth]);
+
+  // Handle click to add/edit chord
+  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-
-    // Calculate character position based on monospace font
-    // We need to measure the actual character width
-    const charWidth = textRef.current
-      ? textRef.current.getBoundingClientRect().width / Math.max(line.text.length, 1)
-      : 8; // fallback
-
-    const position = Math.floor(clickX / charWidth);
-
-    // Check if there's an existing chord at this position
+    const position = getCharPositionFromEvent(e);
     const existingChord = findChordAtPosition(position);
+
+    // Calculate anchor position for the popover
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    const anchorX = containerRect ? containerRect.left + (position * charWidth) + (charWidth / 2) : e.clientX;
+    const anchorY = containerRect?.top ?? e.clientY;
 
     setEditorState({
       position: existingChord ? existingChord.position : position,
-      anchorX: e.clientX,
-      anchorY: rect.top,
+      anchorX,
+      anchorY,
       existingChord,
     });
-  }, [line.text.length, findChordAtPosition]);
+    setHoverPosition(null);
+  }, [getCharPositionFromEvent, findChordAtPosition, charWidth]);
 
-  // Handle click on the text line (shows guide)
-  const handleTextClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  // Track mouse position for visual feedback
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (editorState) return; // Don't show hover when editor is open
+    const position = getCharPositionFromEvent(e);
+    setHoverPosition(position);
+  }, [getCharPositionFromEvent, editorState]);
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-
-    // Calculate character position
-    const charWidth = rect.width / Math.max(line.text.length, 1);
-    const position = Math.floor(clickX / charWidth);
-
-    // Check if there's an existing chord at this position
-    const existingChord = findChordAtPosition(position);
-
-    setEditorState({
-      position: existingChord ? existingChord.position : position,
-      anchorX: e.clientX,
-      anchorY: rect.top,
-      existingChord,
-    });
-  }, [line.text.length, findChordAtPosition]);
+  const handleMouseLeave = useCallback(() => {
+    setHoverPosition(null);
+  }, []);
 
   const handleSaveChord = useCallback(async (chord: string) => {
     if (editorState) {
@@ -139,29 +168,59 @@ function EditableLineDisplay({ line, sectionId, onAddChord, onRemoveChord }: Edi
 
   const chordLine = renderChordLine(line.text, line.chords);
 
+  // Build the chord line with hover indicator
+  const renderChordLineWithIndicator = () => {
+    if (hoverPosition === null || editorState) {
+      return chordLine || '\u00A0';
+    }
+
+    // Check if there's already a chord at hover position
+    const existingChord = findChordAtPosition(hoverPosition);
+    if (existingChord) {
+      return chordLine || '\u00A0';
+    }
+
+    // Insert a visual indicator at the hover position
+    const chars = (chordLine || '').split('');
+    // Pad to hover position if needed
+    while (chars.length <= hoverPosition) {
+      chars.push(' ');
+    }
+
+    // Only show indicator if position is empty
+    if (chars[hoverPosition] === ' ' || chars[hoverPosition] === undefined) {
+      chars[hoverPosition] = '│';
+    }
+
+    return chars.join('') || '\u00A0';
+  };
+
   return (
-    <div className="leading-relaxed group">
-      {/* Chord line - always show (even if empty) for click target */}
+    <div
+      ref={containerRef}
+      className="leading-relaxed group relative"
+      onClick={handleClick}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* Chord line - always show for click target */}
       <div
-        ref={chordLineRef}
-        onClick={handleChordLineClick}
         className={`
           text-indigo-600 dark:text-indigo-400 font-bold whitespace-pre
           min-h-[1.5em] cursor-pointer
           hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded
           transition-colors
-          ${!chordLine ? 'opacity-0 group-hover:opacity-50' : ''}
+          ${!chordLine && hoverPosition === null ? 'opacity-0 group-hover:opacity-50' : ''}
         `}
         title="Click to add or edit chord"
       >
-        {chordLine || '\u00A0'}
+        {renderChordLineWithIndicator()}
       </div>
 
       {/* Lyric line */}
       <div
         ref={textRef}
-        onClick={handleTextClick}
-        className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded transition-colors"
+        className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap cursor-pointer"
         title="Click to add chord at this position"
       >
         {line.text || '\u00A0'}
