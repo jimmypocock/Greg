@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Song, SongStatus, SongUpdateRequest } from '@/types';
 
 interface MetadataEditorProps {
@@ -23,6 +23,15 @@ export function MetadataEditor({ song, onUpdate, isUpdating }: MetadataEditorPro
   const [tempo, setTempo] = useState(song.tempo?.toString() || '');
   const [feel, setFeel] = useState(song.feel || '');
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Sync local state when song prop changes externally (e.g., from audio analysis)
+  useEffect(() => {
+    setTitle(song.title);
+    setKey(song.key || '');
+    setTempo(song.tempo?.toString() || '');
+    setFeel(song.feel || '');
+    setHasChanges(false);
+  }, [song.title, song.key, song.tempo, song.feel]);
 
   const handleTitleChange = (value: string) => {
     setTitle(value);

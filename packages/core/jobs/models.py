@@ -28,6 +28,7 @@ class JobType(str, Enum):
     DOCUMENT_PROCESS = "document_process"
     URL_PROCESS = "url_process"
     AGENT_TASK = "agent_task"
+    AUDIO_ANALYSIS = "audio_analysis"
 
 
 @dataclass

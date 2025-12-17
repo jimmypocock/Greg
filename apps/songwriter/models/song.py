@@ -10,6 +10,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from apps.songwriter.enums import SongStatus
 
 if TYPE_CHECKING:
+    from apps.songwriter.models.audio_file import AudioFile
     from apps.songwriter.models.song_note import SongNote
     from apps.songwriter.models.song_section import SongSection
 
@@ -60,6 +61,9 @@ class Song(SQLModel, table=True):
     song_notes: list["SongNote"] = Relationship(
         back_populates="song",
         sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "SongNote.created_at"},
+    )
+    audio_files: list["AudioFile"] = Relationship(
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "AudioFile.created_at"},
     )
 
     def get_full_lyrics(self) -> str:

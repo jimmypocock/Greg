@@ -62,6 +62,9 @@ dependencies = [
     # Agent Framework (PydanticAI + LangGraph)
     "pydantic-ai>=0.0.40",
     "langgraph>=0.2.0",
+    # Audio Analysis
+    "librosa>=0.10.0",
+    "soundfile>=0.13.0",
 ]
 
 [project.scripts]
