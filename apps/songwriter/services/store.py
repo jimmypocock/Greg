@@ -1,15 +1,29 @@
 """
 In-memory song store.
 
-Simple storage for songs during development.
-Can be replaced with database persistence later.
+DEPRECATED: This module is no longer used in production.
+Use SongDBStore for database-backed storage instead.
+
+This file is kept for reference only and may be removed in a future version.
 """
 
-from datetime import datetime
+import warnings
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
 from apps.songwriter.models import Song
+
+warnings.warn(
+    "SongStore (in-memory store) is deprecated. Use SongDBStore instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+
+def utc_now() -> datetime:
+    """Get current UTC time (Python 3.12+ compatible)."""
+    return datetime.now(timezone.utc)
 
 
 class SongStore:
@@ -39,7 +53,7 @@ class SongStore:
         """Update an existing song."""
         if song_id not in self._songs:
             return None
-        song.updated_at = datetime.utcnow()
+        song.updated_at = utc_now()
         self._songs[song_id] = song
         return song
 

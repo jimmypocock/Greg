@@ -72,6 +72,16 @@ class Config:
     ]
     CORS_ALLOW_ALL = os.getenv("CORS_ALLOW_ALL", "false").lower() == "true"
 
+    # Internal API key for server-to-server communication (Next.js → Backend)
+    # This should be a long, random secret shared between your frontend server and backend
+    INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
+
+    # Stripe settings (optional - for subscriptions)
+    STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+    STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+    STRIPE_PRICE_ID_PRO = os.getenv("STRIPE_PRICE_ID_PRO")  # Pro plan price ID
+    STRIPE_PRICE_ID_ENTERPRISE = os.getenv("STRIPE_PRICE_ID_ENTERPRISE")  # Enterprise plan price ID
+
     @classmethod
     def create_directories(cls):
         cls.UPLOAD_DIR.mkdir(exist_ok=True)

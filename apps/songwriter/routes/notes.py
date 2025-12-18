@@ -23,10 +23,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.songwriter.dependencies import PermissionService
 from apps.songwriter.enums import NoteType
 from apps.songwriter.models import SongNote, SongNoteCreateRequest, SongNoteUpdateRequest
 from apps.songwriter.services.db_store import SongDBStore
+from apps.songwriter.services.permissions import Permission
 from apps.songwriter.services.song_note_store import SongNoteStore
+from packages.core.auth import CurrentUser
 from packages.core.database import get_session_dependency
 
 logger = logging.getLogger(__name__)
@@ -87,10 +90,15 @@ class ContextResponse(BaseModel):
 async def create_note(
     song_id: UUID,
     request: SongNoteCreateRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     note_store: Annotated[SongNoteStore, Depends(get_note_store)],
     song_store: Annotated[SongDBStore, Depends(get_song_store)],
 ):
     """Create a new note for a song."""
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     # Verify song exists
     song = await song_store.get(song_id)
     if not song:
@@ -125,12 +133,19 @@ async def create_note(
 @router.get("/{song_id}/notes", response_model=SongNotesListResponse)
 async def list_notes(
     song_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     note_store: Annotated[SongNoteStore, Depends(get_note_store)],
     song_store: Annotated[SongDBStore, Depends(get_song_store)],
     note_type: Optional[NoteType] = Query(None, description="Filter by note type"),
     include_resolved: bool = Query(True, description="Include resolved notes"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum notes to return"),
+    offset: int = Query(0, ge=0, description="Number of notes to skip"),
 ):
-    """List all notes for a song."""
+    """List all notes for a song with pagination."""
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     # Verify song exists
     song = await song_store.get(song_id)
     if not song:
@@ -139,15 +154,17 @@ async def list_notes(
             detail=f"Song not found: {song_id}",
         )
 
-    notes = await note_store.list_by_song(
+    notes, total = await note_store.list_by_song_paginated(
         song_id,
         note_type=note_type,
         include_resolved=include_resolved,
+        limit=limit,
+        offset=offset,
     )
 
     return SongNotesListResponse(
         notes=[SongNoteResponse.model_validate(n) for n in notes],
-        total=len(notes),
+        total=total,
     )
 
 
@@ -155,9 +172,14 @@ async def list_notes(
 async def get_note(
     song_id: UUID,
     note_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     note_store: Annotated[SongNoteStore, Depends(get_note_store)],
 ):
     """Get a specific note."""
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     note = await note_store.get(note_id)
 
     if not note:
@@ -180,9 +202,14 @@ async def update_note(
     song_id: UUID,
     note_id: UUID,
     request: SongNoteUpdateRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     note_store: Annotated[SongNoteStore, Depends(get_note_store)],
 ):
     """Update a note."""
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     note = await note_store.get(note_id)
 
     if not note:
@@ -221,9 +248,14 @@ async def update_note(
 async def delete_note(
     song_id: UUID,
     note_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     note_store: Annotated[SongNoteStore, Depends(get_note_store)],
 ):
     """Delete a note."""
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     note = await note_store.get(note_id)
 
     if not note:
@@ -246,9 +278,14 @@ async def delete_note(
 async def resolve_note(
     song_id: UUID,
     note_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     note_store: Annotated[SongNoteStore, Depends(get_note_store)],
 ):
     """Mark a note as resolved (useful for TODOs)."""
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     note = await note_store.get(note_id)
 
     if not note:
@@ -273,9 +310,14 @@ async def resolve_note(
 async def unresolve_note(
     song_id: UUID,
     note_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     note_store: Annotated[SongNoteStore, Depends(get_note_store)],
 ):
     """Mark a note as unresolved."""
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     note = await note_store.get(note_id)
 
     if not note:
@@ -299,10 +341,15 @@ async def unresolve_note(
 @router.get("/{song_id}/context", response_model=ContextResponse)
 async def get_ai_context(
     song_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     note_store: Annotated[SongNoteStore, Depends(get_note_store)],
     song_store: Annotated[SongDBStore, Depends(get_song_store)],
 ):
     """Get all notes and context formatted for AI consumption."""
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     # Verify song exists
     song = await song_store.get(song_id)
     if not song:

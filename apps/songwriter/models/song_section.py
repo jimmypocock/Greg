@@ -8,6 +8,7 @@ from sqlalchemy import Column, Enum, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from apps.songwriter.enums import SectionType
+from apps.songwriter.models.utils import utc_now
 
 if TYPE_CHECKING:
     from apps.songwriter.models.line import Line
@@ -36,11 +37,11 @@ class SongSection(SQLModel, table=True):
 
     # Timestamps
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         sa_column_kwargs={"server_default": text("now()")},
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         sa_column_kwargs={"server_default": text("now()")},
     )
 

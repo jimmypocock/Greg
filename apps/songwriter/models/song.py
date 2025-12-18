@@ -8,9 +8,11 @@ from sqlalchemy import Column, Enum, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from apps.songwriter.enums import SongStatus
+from apps.songwriter.models.utils import utc_now
 
 if TYPE_CHECKING:
     from apps.songwriter.models.audio_file import AudioFile
+    from apps.songwriter.models.song_collaborator import SongCollaborator
     from apps.songwriter.models.song_note import SongNote
     from apps.songwriter.models.song_section import SongSection
 
@@ -23,6 +25,9 @@ class Song(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     title: str = Field(max_length=200)
     raw_input: Optional[str] = None
+
+    # Owner - nullable initially for migration, will be NOT NULL after data migration
+    owner_id: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id", index=True)
 
     # Musical metadata
     key: Optional[str] = Field(default=None, max_length=20)
@@ -45,11 +50,11 @@ class Song(SQLModel, table=True):
 
     # Timestamps
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         sa_column_kwargs={"server_default": text("now()")},
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         sa_column_kwargs={"server_default": text("now()")},
     )
 
@@ -64,6 +69,10 @@ class Song(SQLModel, table=True):
     )
     audio_files: list["AudioFile"] = Relationship(
         sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "AudioFile.created_at"},
+    )
+    collaborators: list["SongCollaborator"] = Relationship(
+        back_populates="song",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
 
     def get_full_lyrics(self) -> str:

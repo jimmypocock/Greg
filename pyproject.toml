@@ -65,6 +65,10 @@ dependencies = [
     # Audio Analysis (madmom is optional, see [project.optional-dependencies])
     "librosa>=0.10.0",
     "soundfile>=0.13.0",
+    # Real-time Collaboration (Yjs CRDT)
+    "pycrdt>=0.10.0",
+    # Payments
+    "stripe>=11.0.0",
 ]
 
 [project.scripts]

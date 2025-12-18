@@ -1,57 +1,22 @@
 'use client';
 
-import { Song, SongUpdateRequest, SectionType } from '@/types';
+import { Song, SongUpdateRequest } from '@/types';
 import { CollapsibleSection } from '@/components/layout/CollapsibleSection';
 import { MetadataEditor } from './MetadataEditor';
-import { SectionNavigator } from './SectionNavigator';
 import { ConversationHistoryTool } from './AICriticTool';
 import { SongNotes } from '@/components/SongNotes';
 import { AudioFilesPanel } from './AudioFilesPanel';
 
 interface ToolboxPanelProps {
   song: Song;
-  selectedSectionId: string | null;
-  onSelectSection: (sectionId: string | null) => void;
   onUpdateSong: (data: SongUpdateRequest) => Promise<void>;
-  onUpdateLine: (sectionId: string, lineId: string, text: string) => Promise<void>;
-  onAddLine: (sectionId: string) => Promise<void>;
-  onAddLineWithText: (sectionId: string, text: string) => Promise<void>;
-  onDeleteLine: (sectionId: string, lineId: string) => Promise<void>;
-  onDeleteSection: (sectionId: string) => Promise<void>;
-  onUpdateSection: (sectionId: string, type: SectionType) => Promise<void>;
-  onReorderSections: (sectionIds: string[]) => Promise<void>;
-  onReorderLines: (sectionId: string, lineIds: string[]) => Promise<void>;
-  onAddSection: () => void;
-  // Version props - selecting a version promotes it to main
-  onDuplicateVersion?: (sectionId: string, versionId: string) => void;
-  onSwitchVersion?: (sectionId: string, versionId: string) => void;
-  // Audio upload for version
-  onUploadVersionAudio?: (sectionId: string, versionId: string, file: File) => void;
-  isUploadingAudio?: boolean;
   isUpdating?: boolean;
-  isMutating?: boolean;
 }
 
 export function ToolboxPanel({
   song,
-  selectedSectionId,
-  onSelectSection,
   onUpdateSong,
-  onUpdateLine,
-  onAddLine,
-  onDeleteLine,
-  onDeleteSection,
-  onUpdateSection,
-  onReorderSections,
-  onReorderLines,
-  onAddSection,
-  onDuplicateVersion,
-  onSwitchVersion,
-  onUploadVersionAudio,
-  isUploadingAudio,
   isUpdating,
-  isMutating,
-  onAddLineWithText,
 }: ToolboxPanelProps) {
   return (
     <div className="h-full flex flex-col overflow-y-auto min-h-0">
@@ -85,44 +50,6 @@ export function ToolboxPanel({
         }
       >
         <AudioFilesPanel songId={song.id} />
-      </CollapsibleSection>
-
-      {/* Sections - with inline editing */}
-      <CollapsibleSection
-        title="Sections"
-        storageKey="sections"
-        defaultExpanded={true}
-        badge={
-          <span className="ml-2 px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
-            {song.sections.length}
-          </span>
-        }
-        icon={
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-          </svg>
-        }
-      >
-        <SectionNavigator
-          sections={song.sections}
-          songId={song.id}
-          selectedSectionId={selectedSectionId}
-          onSelectSection={onSelectSection}
-          onReorderSections={onReorderSections}
-          onReorderLines={onReorderLines}
-          onUpdateLine={onUpdateLine}
-          onAddLine={onAddLine}
-          onAddLineWithText={onAddLineWithText}
-          onDeleteLine={onDeleteLine}
-          onDeleteSection={onDeleteSection}
-          onUpdateSection={onUpdateSection}
-          onAddSection={onAddSection}
-          onDuplicateVersion={onDuplicateVersion}
-          onSwitchVersion={onSwitchVersion}
-          onUploadVersionAudio={onUploadVersionAudio}
-          isUploadingAudio={isUploadingAudio}
-          isMutating={isMutating}
-        />
       </CollapsibleSection>
 
       {/* Conversations - AI chat history */}

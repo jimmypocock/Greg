@@ -1,6 +1,6 @@
 'use client';
 
-import { Song } from '@/types';
+import { Song, SectionType } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ChordSheetView } from './ChordSheetView';
 
@@ -9,10 +9,36 @@ interface LivePreviewPanelProps {
   selectedSectionId: string | null;
   onSectionClick?: (sectionId: string) => void;
   onPrint?: () => void;
-  /** Enable chord editing in preview */
+  /** Enable editing in preview */
   editable?: boolean;
+  /** Show chord lines above lyrics (default: true) */
+  showChords?: boolean;
+  /** Callback to toggle chord visibility */
+  onToggleChords?: () => void;
   onAddChord?: (sectionId: string, lineId: string, chord: string, position: number) => void;
   onRemoveChord?: (sectionId: string, lineId: string, position: number) => void;
+  /** Line editing callbacks */
+  onUpdateLine?: (sectionId: string, lineId: string, text: string) => void;
+  onAddLineAfter?: (sectionId: string, afterLineId: string, text: string) => Promise<string | undefined>;
+  onDeleteLine?: (sectionId: string, lineId: string) => void;
+  /** Merge line with previous */
+  onMergeWithPrevious?: (sectionId: string, lineId: string, lineIndex: number, currentText: string) => Promise<{ focusLineId: string; cursorPosition: number } | undefined>;
+  /** Section callbacks */
+  onAddSectionAfter?: (sectionId: string) => Promise<string | undefined>;
+  onDeleteSection?: (sectionId: string) => void;
+  onUpdateSection?: (sectionId: string, type: SectionType) => void;
+  onReorderSections?: (sectionIds: string[]) => void;
+  onAddSection?: () => void;
+  /** Version management callbacks */
+  onDuplicateVersion?: (sectionId: string, versionId: string) => void;
+  onSwitchVersion?: (sectionId: string, versionId: string) => void;
+  /** Audio upload callback */
+  onUploadAudio?: (sectionId: string, versionId: string, file: File) => void;
+  isUploadingAudio?: boolean;
+  /** Focus control for new lines */
+  focusLineId?: string | null;
+  focusCursorPosition?: number;
+  onFocusHandled?: () => void;
 }
 
 export function LivePreviewPanel({
@@ -21,8 +47,26 @@ export function LivePreviewPanel({
   onSectionClick,
   onPrint,
   editable = false,
+  showChords = true,
+  onToggleChords,
   onAddChord,
   onRemoveChord,
+  onUpdateLine,
+  onAddLineAfter,
+  onDeleteLine,
+  onMergeWithPrevious,
+  onAddSectionAfter,
+  onDeleteSection,
+  onUpdateSection,
+  onReorderSections,
+  onAddSection,
+  onDuplicateVersion,
+  onSwitchVersion,
+  onUploadAudio,
+  isUploadingAudio,
+  focusLineId,
+  focusCursorPosition,
+  onFocusHandled,
 }: LivePreviewPanelProps) {
   const handlePrint = () => {
     if (onPrint) {
@@ -66,8 +110,48 @@ export function LivePreviewPanel({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <StatusBadge status={song.status} />
+            {/* Add Section button */}
+            {editable && (onAddSection || onAddSectionAfter) && (
+              <button
+                onClick={() => {
+                  if (selectedSectionId && onAddSectionAfter) {
+                    onAddSectionAfter(selectedSectionId);
+                  } else if (onAddSection) {
+                    onAddSection();
+                  }
+                }}
+                className="
+                  p-2 text-gray-500 dark:text-gray-400
+                  hover:text-indigo-600 dark:hover:text-indigo-400
+                  hover:bg-indigo-50 dark:hover:bg-indigo-900/30
+                  rounded-lg transition-colors
+                "
+                title={selectedSectionId ? 'Add section below selected' : 'Add section'}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            )}
+            {onToggleChords && (
+              <button
+                onClick={onToggleChords}
+                className={`
+                  p-2 rounded-lg transition-colors
+                  ${showChords
+                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }
+                `}
+                title={showChords ? 'Hide chords' : 'Show chords'}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+              </button>
+            )}
             <button
               onClick={handlePrint}
               className="
@@ -93,8 +177,25 @@ export function LivePreviewPanel({
           selectedSectionId={selectedSectionId}
           onSectionClick={onSectionClick}
           editable={editable}
+          showChords={showChords}
           onAddChord={onAddChord}
           onRemoveChord={onRemoveChord}
+          onUpdateLine={onUpdateLine}
+          onAddLineAfter={onAddLineAfter}
+          onDeleteLine={onDeleteLine}
+          onMergeWithPrevious={onMergeWithPrevious}
+          onAddSectionAfter={onAddSectionAfter}
+          onDeleteSection={onDeleteSection}
+          onUpdateSection={onUpdateSection}
+          onReorderSections={onReorderSections}
+          onAddSection={onAddSection}
+          onDuplicateVersion={onDuplicateVersion}
+          onSwitchVersion={onSwitchVersion}
+          onUploadAudio={onUploadAudio}
+          isUploadingAudio={isUploadingAudio}
+          focusLineId={focusLineId}
+          focusCursorPosition={focusCursorPosition}
+          onFocusHandled={onFocusHandled}
         />
       </div>
     </div>

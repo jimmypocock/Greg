@@ -11,8 +11,8 @@ import {
   deleteVersion,
   duplicateVersion,
   promoteVersion,
-} from './versions';
-import { songKeys } from './hooks';
+} from '@/lib/versions';
+import { songKeys } from './songs';
 import type { CreateVersionRequest, UpdateVersionRequest } from '@/types/song';
 
 // Query keys

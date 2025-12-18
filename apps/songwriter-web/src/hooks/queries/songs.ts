@@ -22,7 +22,7 @@ import {
   deleteLine,
   deleteSection,
   reorderLines,
-} from './songs';
+} from '@/lib/songs';
 import {
   SongCreateRequest,
   SongUpdateRequest,

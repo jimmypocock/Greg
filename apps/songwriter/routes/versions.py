@@ -20,9 +20,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.songwriter.dependencies import PermissionService
 from apps.songwriter.models import Line, SectionVersion
 from apps.songwriter.services.db_store import SongDBStore
+from apps.songwriter.services.permissions import Permission
 from apps.songwriter.services.version_store import SectionVersionStore
+from packages.core.auth import CurrentUser
 from packages.core.database import get_session_dependency
 
 logger = logging.getLogger(__name__)
@@ -178,9 +181,15 @@ class UpdateVersionRequest(BaseModel):
 async def verify_song_and_section(
     song_id: UUID,
     section_id: UUID,
+    user_id: UUID,
+    permission: Permission,
     store: SongDBStore,
+    permission_service: PermissionService,
 ) -> None:
-    """Verify the song exists and contains the section."""
+    """Verify the song exists, user has permission, and contains the section."""
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user_id, permission)
+
     song = await store.get(song_id)
     if song is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -196,11 +205,15 @@ async def verify_song_and_section(
 async def list_versions(
     song_id: UUID,
     section_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     version_store: SectionVersionStore = Depends(get_version_store),
 ):
     """List all versions for a section."""
-    await verify_song_and_section(song_id, section_id, store)
+    await verify_song_and_section(
+        song_id, section_id, user.id, Permission.READ, store, permission_service
+    )
 
     versions = await version_store.list_by_section(section_id)
 
@@ -215,6 +228,8 @@ async def create_version(
     song_id: UUID,
     section_id: UUID,
     request: CreateVersionRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     version_store: SectionVersionStore = Depends(get_version_store),
 ):
@@ -222,7 +237,9 @@ async def create_version(
 
     If duplicate_from_version_id is provided, copies all lines from that version.
     """
-    await verify_song_and_section(song_id, section_id, store)
+    await verify_song_and_section(
+        song_id, section_id, user.id, Permission.WRITE, store, permission_service
+    )
 
     if request.duplicate_from_version_id:
         # Duplicate from existing version
@@ -252,11 +269,15 @@ async def get_version(
     song_id: UUID,
     section_id: UUID,
     version_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     version_store: SectionVersionStore = Depends(get_version_store),
 ):
     """Get a specific version with all its lines."""
-    await verify_song_and_section(song_id, section_id, store)
+    await verify_song_and_section(
+        song_id, section_id, user.id, Permission.READ, store, permission_service
+    )
 
     version = await version_store.get(version_id)
     if version is None or version.section_id != section_id:
@@ -271,11 +292,15 @@ async def update_version(
     section_id: UUID,
     version_id: UUID,
     request: UpdateVersionRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     version_store: SectionVersionStore = Depends(get_version_store),
 ):
     """Update a version's metadata (name, notes)."""
-    await verify_song_and_section(song_id, section_id, store)
+    await verify_song_and_section(
+        song_id, section_id, user.id, Permission.WRITE, store, permission_service
+    )
 
     version = await version_store.get(version_id)
     if version is None or version.section_id != section_id:
@@ -299,6 +324,8 @@ async def delete_version(
     song_id: UUID,
     section_id: UUID,
     version_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     version_store: SectionVersionStore = Depends(get_version_store),
 ):
@@ -307,7 +334,9 @@ async def delete_version(
     Cannot delete the last remaining version of a section.
     If deleting the main version, another version will be promoted.
     """
-    await verify_song_and_section(song_id, section_id, store)
+    await verify_song_and_section(
+        song_id, section_id, user.id, Permission.WRITE, store, permission_service
+    )
 
     version = await version_store.get(version_id)
     if version is None or version.section_id != section_id:
@@ -328,12 +357,16 @@ async def duplicate_version(
     song_id: UUID,
     section_id: UUID,
     version_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     name: Optional[str] = None,
     store: SongDBStore = Depends(get_db_store),
     version_store: SectionVersionStore = Depends(get_version_store),
 ):
     """Duplicate a version with all its lines."""
-    await verify_song_and_section(song_id, section_id, store)
+    await verify_song_and_section(
+        song_id, section_id, user.id, Permission.WRITE, store, permission_service
+    )
 
     version = await version_store.get(version_id)
     if version is None or version.section_id != section_id:
@@ -352,11 +385,15 @@ async def promote_version(
     song_id: UUID,
     section_id: UUID,
     version_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     version_store: SectionVersionStore = Depends(get_version_store),
 ):
     """Promote a version to be the main version."""
-    await verify_song_and_section(song_id, section_id, store)
+    await verify_song_and_section(
+        song_id, section_id, user.id, Permission.WRITE, store, permission_service
+    )
 
     version = await version_store.get(version_id)
     if version is None or version.section_id != section_id:

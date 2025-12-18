@@ -10,49 +10,71 @@ Endpoints:
     POST   /songs/{song_id}/audio/{audio_id}/apply   - Apply analysis to song
 """
 
+import json
 import logging
-import os
-import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.songwriter.constants import (
+    ALLOWED_AUDIO_MIME_TYPES,
+    AUDIO_FILE_SIGNATURES,
+    AUDIO_UPLOAD_DIR,
+    MAX_AUDIO_FILE_SIZE_BYTES,
+    MAX_AUDIO_FILE_SIZE_MB,
+)
+from apps.songwriter.dependencies import PermissionService
 from apps.songwriter.enums import AnalysisStatus
 from apps.songwriter.models import AudioFile
 from apps.songwriter.services.audio_runner import run_audio_analysis_task
 from apps.songwriter.services.audio_store import AudioFileStore
 from apps.songwriter.services.db_store import SongDBStore
+from apps.songwriter.services.permissions import Permission
+from packages.core.auth import CurrentUser
 from packages.core.database import get_session_dependency
 
 logger = logging.getLogger(__name__)
 
-# Anonymous user ID for standalone songwriter app (no auth)
-ANONYMOUS_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
-
-# Upload directory for audio files
-UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "uploads")) / "audio"
-
-# Allowed audio MIME types
-ALLOWED_MIME_TYPES = {
-    "audio/mpeg": [".mp3"],
-    "audio/mp3": [".mp3"],
-    "audio/wav": [".wav"],
-    "audio/x-wav": [".wav"],
-    "audio/wave": [".wav"],
-    "audio/x-m4a": [".m4a"],
-    "audio/mp4": [".m4a"],
-    "audio/aac": [".aac"],
-}
-
-# Max file size (50MB)
-MAX_FILE_SIZE = 50 * 1024 * 1024
-
 router = APIRouter(prefix="/songs/{song_id}/audio", tags=["Audio"])
+
+
+def validate_audio_file_content(content: bytes, claimed_mime_type: str) -> str | None:
+    """
+    Validate audio file content using magic bytes.
+
+    Args:
+        content: File content bytes
+        claimed_mime_type: MIME type claimed by the upload
+
+    Returns:
+        Detected MIME type if valid, None if invalid
+    """
+    if len(content) < 12:
+        return None
+
+    # Check for MP3 signatures
+    if content[:3] == b"ID3" or content[:2] in (b"\xff\xfb", b"\xff\xfa", b"\xff\xf3", b"\xff\xf2"):
+        return "audio/mpeg"
+
+    # Check for WAV (RIFF header)
+    if content[:4] == b"RIFF" and content[8:12] == b"WAVE":
+        return "audio/wav"
+
+    # Check for M4A/MP4 (ftyp box at offset 4)
+    if content[4:8] == b"ftyp":
+        return "audio/mp4"
+
+    # If we can't detect from magic bytes, trust the claimed type
+    # but only if it's in our allowed list
+    if claimed_mime_type in ALLOWED_AUDIO_MIME_TYPES:
+        return claimed_mime_type
+
+    return None
 
 
 # Dependencies
@@ -111,25 +133,30 @@ class AudioFileResponse(BaseModel):
     @classmethod
     def from_db(cls, audio_file) -> "AudioFileResponse":
         """Create response from database model, parsing JSON fields."""
-        import json
+        # Type adapters for validated parsing
+        chords_adapter = TypeAdapter(list[ChordDetection])
+        beats_adapter = TypeAdapter(list[float])
 
-        # Parse chords JSON (may not exist if migration not run)
+        # Parse chords JSON with Pydantic validation
         chords = None
         detected_chords_raw = getattr(audio_file, 'detected_chords', None)
         if detected_chords_raw:
             try:
                 chords_data = json.loads(detected_chords_raw)
-                chords = [ChordDetection(**c) for c in chords_data]
-            except (json.JSONDecodeError, TypeError, KeyError):
+                chords = chords_adapter.validate_python(chords_data)
+            except (json.JSONDecodeError, ValidationError) as e:
+                logger.warning(f"Failed to parse detected_chords for audio {audio_file.id}: {e}")
                 chords = None
 
-        # Parse beats JSON (may not exist if migration not run)
+        # Parse beats JSON with Pydantic validation
         beats = None
         beat_positions_raw = getattr(audio_file, 'beat_positions', None)
         if beat_positions_raw:
             try:
-                beats = json.loads(beat_positions_raw)
-            except (json.JSONDecodeError, TypeError):
+                beats_data = json.loads(beat_positions_raw)
+                beats = beats_adapter.validate_python(beats_data)
+            except (json.JSONDecodeError, ValidationError) as e:
+                logger.warning(f"Failed to parse beat_positions for audio {audio_file.id}: {e}")
                 beats = None
 
         return cls(
@@ -200,6 +227,8 @@ class UpdateAudioFileRequest(BaseModel):
 @router.post("/", response_model=AudioUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_audio(
     song_id: uuid.UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     file: UploadFile = File(...),
     is_reference: bool = Form(False),
     section_version_id: Optional[uuid.UUID] = Form(None),
@@ -216,29 +245,36 @@ async def upload_audio(
     Optionally, attach the audio to a specific section version by providing
     section_version_id. If not provided, the audio is song-level.
     """
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     # Verify song exists
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
 
-    # Validate file type
-    content_type = file.content_type or ""
-    if content_type not in ALLOWED_MIME_TYPES:
+    # Read file content first to validate
+    content = await file.read()
+
+    # Validate file size
+    if len(content) > MAX_AUDIO_FILE_SIZE_BYTES:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"Invalid file type: {content_type}. Allowed: mp3, wav, m4a",
+            f"File too large. Maximum size is {MAX_AUDIO_FILE_SIZE_MB}MB",
         )
 
-    # Read file content to check size
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
+    # Validate file type using both header and magic bytes
+    claimed_type = file.content_type or ""
+    validated_type = validate_audio_file_content(content, claimed_type)
+
+    if not validated_type:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)}MB",
+            f"Invalid or unrecognized audio file. Allowed formats: mp3, wav, m4a, aac",
         )
 
     # Create storage directory
-    song_dir = UPLOAD_DIR / str(song_id)
+    song_dir = AUDIO_UPLOAD_DIR / str(song_id)
     song_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate unique filename
@@ -264,7 +300,7 @@ async def upload_audio(
         section_version_id=section_version_id,
         filename=file.filename or "audio",
         storage_path=str(storage_path),
-        mime_type=content_type,
+        mime_type=validated_type,
         file_size_bytes=len(content),
         is_reference=is_reference,
         analysis_status=AnalysisStatus.PENDING,
@@ -280,6 +316,8 @@ async def upload_audio(
 @router.get("/", response_model=AudioFileListResponse)
 async def list_audio_files(
     song_id: uuid.UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     section_version_id: Optional[uuid.UUID] = None,
     song_level_only: bool = False,
     store: SongDBStore = Depends(get_db_store),
@@ -292,6 +330,9 @@ async def list_audio_files(
     - section_version_id: Filter to audio files attached to this version
     - song_level_only: If true, only return audio files with no version (song-level)
     """
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -312,10 +353,15 @@ async def list_audio_files(
 async def get_audio_file(
     song_id: uuid.UUID,
     audio_id: uuid.UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     audio_store: AudioFileStore = Depends(get_audio_store),
 ):
     """Get an audio file by ID."""
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -332,10 +378,15 @@ async def update_audio_file(
     song_id: uuid.UUID,
     audio_id: uuid.UUID,
     request: UpdateAudioFileRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     audio_store: AudioFileStore = Depends(get_audio_store),
 ):
     """Update an audio file's metadata (display name, reference status)."""
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -367,10 +418,15 @@ async def update_audio_file(
 async def delete_audio_file(
     song_id: uuid.UUID,
     audio_id: uuid.UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     audio_store: AudioFileStore = Depends(get_audio_store),
 ):
     """Delete an audio file."""
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -395,6 +451,8 @@ async def delete_audio_file(
 async def stream_audio_file(
     song_id: uuid.UUID,
     audio_id: uuid.UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     audio_store: AudioFileStore = Depends(get_audio_store),
 ):
@@ -404,6 +462,9 @@ async def stream_audio_file(
     Returns the audio file with appropriate headers for browser playback.
     """
     from fastapi.responses import FileResponse
+
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
 
     song = await store.get(song_id)
     if not song:
@@ -432,6 +493,8 @@ async def stream_audio_file(
 async def analyze_audio_file(
     song_id: uuid.UUID,
     audio_id: uuid.UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     audio_store: AudioFileStore = Depends(get_audio_store),
 ):
@@ -441,6 +504,9 @@ async def analyze_audio_file(
     Returns immediately with a task_id. Connect to the WebSocket
     at /ws/jobs/{task_id} for real-time progress updates.
     """
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -464,7 +530,7 @@ async def analyze_audio_file(
     task_id = await run_audio_analysis_task(
         audio_file_id=audio_id,
         file_path=storage_path,
-        user_id=ANONYMOUS_USER_ID,
+        user_id=user.id,
     )
 
     logger.info(f"Started audio analysis for {audio_id}, task_id={task_id}")
@@ -480,6 +546,8 @@ async def analyze_audio_file(
 async def apply_analysis_to_song(
     song_id: uuid.UUID,
     audio_id: uuid.UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: SongDBStore = Depends(get_db_store),
     audio_store: AudioFileStore = Depends(get_audio_store),
 ):
@@ -488,6 +556,9 @@ async def apply_analysis_to_song(
 
     This will update the song's tempo and key based on the detected values.
     """
+    # Check permission (raises 404 if song not found or no access, 403 if insufficient)
+    await permission_service.require_permission(song_id, user.id, Permission.WRITE)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")

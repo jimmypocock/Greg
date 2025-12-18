@@ -6,6 +6,7 @@ Runs agent tasks asynchronously and streams updates via WebSocket.
 
 import asyncio
 import logging
+from typing import Any
 from uuid import UUID
 
 from apps.songwriter.agents.workflow import (
@@ -23,6 +24,15 @@ from packages.core.jobs.models import JobType
 from packages.core.websocket import connection_manager
 
 logger = logging.getLogger(__name__)
+
+
+def _task_exception_handler(task: asyncio.Task[Any]) -> None:
+    """Handle exceptions from background tasks to prevent silent failures."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error(f"Background task {task.get_name()} failed with unhandled exception: {exc}")
 
 
 # Map our enums to workflow TaskType
@@ -60,8 +70,8 @@ async def run_agent_task(
     job = await job_manager.create_job(JobType.AGENT_TASK, user_id)
     task_id = job.job_id
 
-    # Run the agent task in the background
-    asyncio.create_task(
+    # Run the agent task in the background with exception handling
+    task = asyncio.create_task(
         _run_agent_task_async(
             task_id=task_id,
             song=song,
@@ -69,8 +79,10 @@ async def run_agent_task(
             review_store=review_store,
             llm=llm,
             section_index=section_index,
-        )
+        ),
+        name=f"agent_task_{task_id}",
     )
+    task.add_done_callback(_task_exception_handler)
 
     return task_id
 
@@ -183,15 +195,18 @@ async def run_chat_task(
     job = await job_manager.create_job(JobType.AGENT_TASK, user_id)
     task_id = job.job_id
 
-    asyncio.create_task(
+    # Run chat task with exception handling
+    task = asyncio.create_task(
         _run_chat_task_async(
             task_id=task_id,
             song=song,
             user_message=user_message,
             conversation_history=conversation_history,
             llm=llm,
-        )
+        ),
+        name=f"chat_task_{task_id}",
     )
+    task.add_done_callback(_task_exception_handler)
 
     return task_id
 

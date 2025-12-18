@@ -11,8 +11,8 @@ import {
   updateAudioFile,
   analyzeAudioFile,
   applyAudioAnalysis,
-} from './audio';
-import { songKeys } from './hooks';
+} from '@/lib/audio';
+import { songKeys } from './songs';
 import type { AudioFile, AnalysisStatus, AudioEvent, UpdateAudioFileRequest } from '@/types/audio';
 
 // Query keys

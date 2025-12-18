@@ -7,6 +7,7 @@ Runs audio analysis tasks asynchronously and streams updates via WebSocket.
 import asyncio
 import logging
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from apps.songwriter.enums import AnalysisStatus
@@ -22,6 +23,15 @@ from packages.core.jobs.models import JobType
 from packages.core.websocket import connection_manager
 
 logger = logging.getLogger(__name__)
+
+
+def _task_exception_handler(task: asyncio.Task[Any]) -> None:
+    """Handle exceptions from background tasks to prevent silent failures."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error(f"Background task {task.get_name()} failed with unhandled exception: {exc}")
 
 
 async def run_audio_analysis_task(
@@ -43,14 +53,16 @@ async def run_audio_analysis_task(
     job = await job_manager.create_job(JobType.AUDIO_ANALYSIS, user_id)
     task_id = job.job_id
 
-    # Run analysis in background
-    asyncio.create_task(
+    # Run analysis in background with exception handling
+    task = asyncio.create_task(
         _run_audio_analysis_async(
             task_id=task_id,
             audio_file_id=audio_file_id,
             file_path=file_path,
-        )
+        ),
+        name=f"audio_analysis_{task_id}",
     )
+    task.add_done_callback(_task_exception_handler)
 
     return task_id
 

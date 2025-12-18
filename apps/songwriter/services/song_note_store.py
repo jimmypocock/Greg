@@ -1,6 +1,6 @@
 """Database-backed song note store using SQLModel."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -9,6 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.songwriter.enums import NoteType
 from apps.songwriter.models import SongNote
+
+
+def utc_now() -> datetime:
+    """Get current UTC time (Python 3.12+ compatible)."""
+    return datetime.now(timezone.utc)
 
 
 class SongNoteStore:
@@ -50,6 +55,42 @@ class SongNoteStore:
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
+    async def list_by_song_paginated(
+        self,
+        song_id: UUID,
+        note_type: Optional[NoteType] = None,
+        include_resolved: bool = True,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[SongNote], int]:
+        """List notes for a song with pagination.
+
+        Returns:
+            Tuple of (notes list, total count)
+        """
+        from sqlalchemy import func
+
+        # Build base query for filtering
+        base_query = select(SongNote).where(SongNote.song_id == song_id)
+
+        if note_type:
+            base_query = base_query.where(SongNote.note_type == note_type)
+
+        if not include_resolved:
+            base_query = base_query.where(SongNote.is_resolved == False)  # noqa: E712
+
+        # Get total count
+        count_query = select(func.count()).select_from(base_query.subquery())
+        count_result = await self.session.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Get paginated results
+        query = base_query.order_by(SongNote.created_at.desc()).limit(limit).offset(offset)
+        result = await self.session.execute(query)
+        notes = list(result.scalars().all())
+
+        return notes, total
+
     async def list_by_section(
         self,
         section_id: UUID,
@@ -66,16 +107,25 @@ class SongNoteStore:
         return list(result.scalars().all())
 
     async def update(self, note_id: UUID, updates: dict) -> Optional[SongNote]:
-        """Update a note's content or metadata."""
+        """Update a note's content or metadata.
+
+        Allowed fields: title, content, note_type, is_resolved
+        """
         note = await self.get(note_id)
         if note is None:
             return None
 
-        for key, value in updates.items():
-            if hasattr(note, key) and value is not None:
-                setattr(note, key, value)
+        # Explicit field updates
+        if "title" in updates and updates["title"] is not None:
+            note.title = updates["title"]
+        if "content" in updates and updates["content"] is not None:
+            note.content = updates["content"]
+        if "note_type" in updates and updates["note_type"] is not None:
+            note.note_type = updates["note_type"]
+        if "is_resolved" in updates and updates["is_resolved"] is not None:
+            note.is_resolved = updates["is_resolved"]
 
-        note.updated_at = datetime.utcnow()
+        note.updated_at = utc_now()
         await self.session.commit()
         await self.session.refresh(note)
         return note

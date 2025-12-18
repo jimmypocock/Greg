@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { Song } from '@/types';
 import { useChatSession } from '@/hooks/useChatSession';
 import { ChatMessage } from './ChatMessage';
@@ -30,27 +30,29 @@ export function AIChatPanel({ song, onClose }: AIChatPanelProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, progress.streamedText]);
 
-  // Build display messages with streaming content
-  const displayMessages: ChatMessageType[] = messages.map((msg) => {
-    if (msg.id === currentAssistantMessageId && progress.streamedText) {
-      return {
-        ...msg,
-        content: progress.streamedText,
-        isStreaming: progress.status === 'running',
-        metadata: progress.status === 'completed' && progress.result
-          ? {
-              duration_ms: progress.result.duration_ms,
-              tokens: {
-                input: progress.result.input_tokens,
-                output: progress.result.output_tokens,
-              },
-              cost: progress.result.total_cost_usd,
-            }
-          : undefined,
-      };
-    }
-    return msg;
-  });
+  // Build display messages with streaming content (memoized to prevent unnecessary re-renders)
+  const displayMessages = useMemo<ChatMessageType[]>(() => {
+    return messages.map((msg) => {
+      if (msg.id === currentAssistantMessageId && progress.streamedText) {
+        return {
+          ...msg,
+          content: progress.streamedText,
+          isStreaming: progress.status === 'running',
+          metadata: progress.status === 'completed' && progress.result
+            ? {
+                duration_ms: progress.result.duration_ms,
+                tokens: {
+                  input: progress.result.input_tokens,
+                  output: progress.result.output_tokens,
+                },
+                cost: progress.result.total_cost_usd,
+              }
+            : undefined,
+        };
+      }
+      return msg;
+    });
+  }, [messages, currentAssistantMessageId, progress.streamedText, progress.status, progress.result]);
 
   return (
     <div className="h-full flex flex-col">

@@ -3,12 +3,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { ChatMessage, QuickActionType } from '@/types/chat';
 
-// Simple ID generator
-let idCounter = 0;
+// Generate unique message IDs using crypto.randomUUID()
+// This is safe for SSR and avoids module-level state
 function generateId(): string {
-  return `msg-${Date.now()}-${++idCounter}`;
+  return `msg-${crypto.randomUUID()}`;
 }
-import { useAgentWebSocket } from '@/lib/useAgentWebSocket';
+import { useAgentWebSocket } from '@/hooks/useAgentWebSocket';
 import {
   reviewSong,
   checkCliches,

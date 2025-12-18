@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import text as sa_text
 from sqlmodel import Field, Relationship, SQLModel
 
+from apps.songwriter.models.utils import utc_now
+
 if TYPE_CHECKING:
     from apps.songwriter.models.chord_placement import ChordPlacement
     from apps.songwriter.models.section_version import SectionVersion
@@ -29,11 +31,11 @@ class Line(SQLModel, table=True):
 
     # Timestamps
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         sa_column_kwargs={"server_default": sa_text("now()")},
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         sa_column_kwargs={"server_default": sa_text("now()")},
     )
 

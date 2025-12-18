@@ -14,8 +14,8 @@ import {
   analyzeRhythm,
   getReviewHistory,
   getTaskStatus,
-} from './agents';
-import { useAgentWebSocket, type AgentProgress } from './useAgentWebSocket';
+} from '@/lib/agents';
+import { useAgentWebSocket, type AgentProgress } from '@/hooks/useAgentWebSocket';
 import type {
   AgentTaskResponse,
   AgentTaskResult,

@@ -1,11 +1,11 @@
 'use client';
 
-import { use, useState, useCallback } from 'react';
+import { use, useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines, useAddChord, useRemoveChord, songKeys } from '@/lib/hooks';
+import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines, useAddChord, useRemoveChord, songKeys } from '@/hooks/queries/songs';
 import { duplicateVersion, promoteVersion } from '@/lib/versions';
-import { useUploadAudio } from '@/lib/audioHooks';
+import { useUploadAudio } from '@/hooks/queries/audio';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThreePaneLayout } from '@/components/layout/ThreePaneLayout';
 import { ToolboxPanel } from '@/components/toolbox/ToolboxPanel';
@@ -13,12 +13,22 @@ import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
 import { AIChatPanel } from '@/components/chat/AIChatPanel';
 import { SongStatus, StructureSuggestion, SectionType } from '@/types';
 import { useUndoRedo } from '@/hooks/useUndoRedo';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+import { UserMenu } from '@/components/auth/UserMenu';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 export default function SongPage({ params }: PageProps) {
+  return (
+    <AuthGuard>
+      <SongPageContent params={params} />
+    </AuthGuard>
+  );
+}
+
+function SongPageContent({ params }: PageProps) {
   const resolvedParams = use(params);
   const router = useRouter();
   const { data: song, isLoading, error } = useSong(resolvedParams.id);
@@ -43,13 +53,26 @@ export default function SongPage({ params }: PageProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [suggestion, setSuggestion] = useState<StructureSuggestion | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(true);
+  const [focusLineId, setFocusLineId] = useState<string | null>(null);
+  const [focusCursorPosition, setFocusCursorPosition] = useState<number>(0);
+  const [showChords, setShowChords] = useState(true);
 
   // Undo/Redo support
   const { pushAction, undo, redo, canUndo, canRedo, isPerformingAction } = useUndoRedo();
 
+  // Keep a ref to the latest song state for use in undo/redo callbacks
+  // This avoids stale closures when callbacks execute later
+  const songRef = useRef(song);
+  useEffect(() => {
+    songRef.current = song;
+  }, [song]);
+
   // Version handlers
   const handleDuplicateVersion = useCallback(async (sectionId: string, versionId: string) => {
-    await duplicateVersion(resolvedParams.id, sectionId, versionId);
+    // Duplicate the version
+    const newVersion = await duplicateVersion(resolvedParams.id, sectionId, versionId);
+    // Promote the new version to main so it displays immediately
+    await promoteVersion(resolvedParams.id, sectionId, newVersion.id);
     // Invalidate song query to refresh versions list
     queryClient.invalidateQueries({ queryKey: songKeys.detail(resolvedParams.id) });
   }, [resolvedParams.id, queryClient]);
@@ -146,24 +169,187 @@ export default function SongPage({ params }: PageProps) {
     }
   }, [addLine, deleteLine, pushAction]);
 
-  const handleAddSection = useCallback(async () => {
-    const result = await addSection.mutateAsync({ type: SectionType.VERSE });
+  // Add line after a specific line (for Enter key handling)
+  const handleAddLineAfter = useCallback(async (sectionId: string, afterLineId: string, text: string): Promise<string | undefined> => {
+    const result = await addLine.mutateAsync({
+      section_id: sectionId,
+      text,
+      after_line_id: afterLineId,
+    });
 
-    // Find the newly added section (it should be the last one)
-    const newSection = result.sections[result.sections.length - 1];
+    // Find the newly added line (it should be right after afterLineId)
+    const section = result.sections.find(s => s.id === sectionId);
+    if (!section) return undefined;
+
+    const afterLineIndex = section.lines.findIndex(l => l.id === afterLineId);
+    const newLine = section.lines[afterLineIndex + 1];
+
+    if (newLine) {
+      // Set focus to the new line at position 0
+      setFocusLineId(newLine.id);
+      setFocusCursorPosition(0);
+
+      pushAction({
+        description: 'Add line',
+        undo: async () => {
+          await deleteLine.mutateAsync({ section_id: sectionId, line_id: newLine.id });
+        },
+        redo: async () => {
+          await addLine.mutateAsync({ section_id: sectionId, text, after_line_id: afterLineId });
+        },
+      });
+
+      return newLine.id;
+    }
+
+    return undefined;
+  }, [addLine, deleteLine, pushAction]);
+
+  // Clear focus after it's been handled
+  const handleFocusHandled = useCallback(() => {
+    setFocusLineId(null);
+    setFocusCursorPosition(0);
+  }, []);
+
+  // Toggle chords visibility
+  const handleToggleChords = useCallback(() => {
+    setShowChords(prev => !prev);
+  }, []);
+
+  // Merge line with the previous line (backspace at start of line with content)
+  const handleMergeWithPrevious = useCallback(async (
+    sectionId: string,
+    lineId: string,
+    lineIndex: number,
+    currentText: string
+  ): Promise<{ focusLineId: string; cursorPosition: number } | undefined> => {
+    const section = song?.sections.find(s => s.id === sectionId);
+    if (!section || lineIndex === 0) return undefined;
+
+    const previousLine = section.lines[lineIndex - 1];
+    if (!previousLine) return undefined;
+
+    const previousText = previousLine.text;
+    const mergedText = previousText + currentText;
+    const cursorPosition = previousText.length;
+
+    // Update the previous line with merged text
+    await updateLine.mutateAsync({ section_id: sectionId, line_id: previousLine.id, text: mergedText });
+    // Delete the current line
+    await deleteLine.mutateAsync({ section_id: sectionId, line_id: lineId });
+
+    // Set focus to the previous line at the merge point
+    setFocusLineId(previousLine.id);
+    setFocusCursorPosition(cursorPosition);
+
+    pushAction({
+      description: 'Merge lines',
+      undo: async () => {
+        await updateLine.mutateAsync({ section_id: sectionId, line_id: previousLine.id, text: previousText });
+        await addLine.mutateAsync({ section_id: sectionId, text: currentText, after_line_id: previousLine.id });
+      },
+      redo: async () => {
+        // Use songRef.current to get the latest state (avoids stale closure)
+        const currentSection = songRef.current?.sections.find(s => s.id === sectionId);
+        const restoredLineIndex = currentSection?.lines.findIndex(l => l.id === previousLine.id);
+        if (restoredLineIndex !== undefined && restoredLineIndex >= 0 && currentSection) {
+          const nextLine = currentSection.lines[restoredLineIndex + 1];
+          if (nextLine) {
+            await updateLine.mutateAsync({ section_id: sectionId, line_id: previousLine.id, text: mergedText });
+            await deleteLine.mutateAsync({ section_id: sectionId, line_id: nextLine.id });
+          }
+        }
+      },
+    });
+
+    return { focusLineId: previousLine.id, cursorPosition };
+  }, [song, updateLine, deleteLine, addLine, pushAction]);
+
+  // Add a new section after a specific section
+  const handleAddSectionAfter = useCallback(async (afterSectionId: string): Promise<string | undefined> => {
+    // Find the current position of afterSectionId
+    const afterIndex = song?.sections.findIndex(s => s.id === afterSectionId) ?? -1;
+
+    const result = await addSection.mutateAsync({
+      type: SectionType.VERSE,
+      after_section_id: afterSectionId,
+    });
+
+    // Find the newly added section (it should be at afterIndex + 1)
+    const newSection = afterIndex >= 0 && afterIndex + 1 < result.sections.length
+      ? result.sections[afterIndex + 1]
+      : result.sections[result.sections.length - 1];
 
     if (newSection) {
+      // Select the new section
+      setSelectedSectionId(newSection.id);
+
+      // Set focus to the first line of the new section
+      const firstLine = newSection.lines[0];
+      if (firstLine) {
+        setFocusLineId(firstLine.id);
+        setFocusCursorPosition(0);
+      }
+
       pushAction({
         description: 'Add section',
         undo: async () => {
           await deleteSectionMutation.mutateAsync(newSection.id);
         },
         redo: async () => {
-          await addSection.mutateAsync({ type: SectionType.VERSE });
+          await addSection.mutateAsync({ type: SectionType.VERSE, after_section_id: afterSectionId });
+        },
+      });
+
+      return newSection.id;
+    }
+
+    return undefined;
+  }, [song, addSection, deleteSectionMutation, pushAction]);
+
+  // Add a new section (uses selected section if available, otherwise adds at end)
+  const handleAddSection = useCallback(async () => {
+    // If a section is selected, add after it
+    const afterSectionId = selectedSectionId;
+
+    const result = await addSection.mutateAsync({
+      type: SectionType.VERSE,
+      after_section_id: afterSectionId || undefined,
+    });
+
+    // Find the newly added section
+    let newSection;
+    if (afterSectionId) {
+      const afterIndex = result.sections.findIndex(s => s.id === afterSectionId);
+      newSection = afterIndex >= 0 && afterIndex + 1 < result.sections.length
+        ? result.sections[afterIndex + 1]
+        : result.sections[result.sections.length - 1];
+    } else {
+      newSection = result.sections[result.sections.length - 1];
+    }
+
+    if (newSection) {
+      // Select the new section
+      setSelectedSectionId(newSection.id);
+
+      // Set focus to the first line
+      const firstLine = newSection.lines[0];
+      if (firstLine) {
+        setFocusLineId(firstLine.id);
+        setFocusCursorPosition(0);
+      }
+
+      pushAction({
+        description: 'Add section',
+        undo: async () => {
+          await deleteSectionMutation.mutateAsync(newSection.id);
+        },
+        redo: async () => {
+          await addSection.mutateAsync({ type: SectionType.VERSE, after_section_id: afterSectionId || undefined });
         },
       });
     }
-  }, [addSection, deleteSectionMutation, pushAction]);
+  }, [selectedSectionId, addSection, deleteSectionMutation, pushAction]);
 
   const handleUpdateSection = useCallback(async (sectionId: string, type: SectionType) => {
     // Find the current section type for undo
@@ -381,6 +567,7 @@ export default function SongPage({ params }: PageProps) {
             >
               Delete
             </button>
+            <UserMenu />
           </div>
         </div>
       </header>
@@ -460,32 +647,8 @@ export default function SongPage({ params }: PageProps) {
         leftPanel={
           <ToolboxPanel
             song={song}
-            selectedSectionId={selectedSectionId}
-            onSelectSection={setSelectedSectionId}
             onUpdateSong={handleUpdateSong}
-            onUpdateLine={handleUpdateLine}
-            onAddLine={handleAddLine}
-            onAddLineWithText={handleAddLineWithText}
-            onDeleteLine={handleDeleteLine}
-            onDeleteSection={handleDeleteSection}
-            onUpdateSection={handleUpdateSection}
-            onReorderSections={handleReorderSections}
-            onReorderLines={handleReorderLines}
-            onAddSection={handleAddSection}
-            onDuplicateVersion={handleDuplicateVersion}
-            onSwitchVersion={handleSwitchVersion}
-            onUploadVersionAudio={handleUploadVersionAudio}
-            isUploadingAudio={uploadAudio.isPending}
             isUpdating={updateSong.isPending}
-            isMutating={
-              addLine.isPending ||
-              deleteLine.isPending ||
-              updateLine.isPending ||
-              updateSectionMutation.isPending ||
-              reorderSections.isPending ||
-              deleteSectionMutation.isPending ||
-              reorderLines.isPending
-            }
           />
         }
         centerPanel={
@@ -494,8 +657,26 @@ export default function SongPage({ params }: PageProps) {
             selectedSectionId={selectedSectionId}
             onSectionClick={setSelectedSectionId}
             editable={true}
+            showChords={showChords}
+            onToggleChords={handleToggleChords}
             onAddChord={handleAddChord}
             onRemoveChord={handleRemoveChord}
+            onUpdateLine={handleUpdateLine}
+            onAddLineAfter={handleAddLineAfter}
+            onDeleteLine={handleDeleteLine}
+            onMergeWithPrevious={handleMergeWithPrevious}
+            onAddSectionAfter={handleAddSectionAfter}
+            onDeleteSection={handleDeleteSection}
+            onUpdateSection={handleUpdateSection}
+            onReorderSections={handleReorderSections}
+            onAddSection={handleAddSection}
+            onDuplicateVersion={handleDuplicateVersion}
+            onSwitchVersion={handleSwitchVersion}
+            onUploadAudio={handleUploadVersionAudio}
+            isUploadingAudio={uploadAudio.isPending}
+            focusLineId={focusLineId}
+            focusCursorPosition={focusCursorPosition}
+            onFocusHandled={handleFocusHandled}
           />
         }
         rightPanel={

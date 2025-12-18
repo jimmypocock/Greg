@@ -1,27 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Section, SectionType } from '@/types';
+import { Section } from '@/types';
+import { sectionLabels } from '@/lib/constants';
 
 interface SectionEditorProps {
   section: Section;
   onUpdateLine?: (sectionId: string, lineId: string, text: string) => void;
   onAddLine?: (sectionId: string) => void;
 }
-
-const sectionLabels: Record<SectionType, string> = {
-  [SectionType.INTRO]: 'Intro',
-  [SectionType.VERSE]: 'Verse',
-  [SectionType.PRE_CHORUS]: 'Pre-Chorus',
-  [SectionType.CHORUS]: 'Chorus',
-  [SectionType.POST_CHORUS]: 'Post-Chorus',
-  [SectionType.BRIDGE]: 'Bridge',
-  [SectionType.OUTRO]: 'Outro',
-  [SectionType.INSTRUMENTAL]: 'Instrumental',
-  [SectionType.SOLO]: 'Solo',
-  [SectionType.BREAKDOWN]: 'Breakdown',
-  [SectionType.OTHER]: 'Other',
-};
 
 export function SectionEditor({ section, onUpdateLine, onAddLine }: SectionEditorProps) {
   const [editingLineId, setEditingLineId] = useState<string | null>(null);

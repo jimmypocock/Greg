@@ -22,6 +22,10 @@ export function useUndoRedo(options: UseUndoRedoOptions = {}) {
   // Use ref to track if we're in an undo/redo operation
   const isUndoRedoRef = useRef(false);
 
+  // Refs for callbacks to avoid re-registering event listener
+  const undoRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const redoRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
   const pushAction = useCallback((action: UndoRedoAction) => {
     // Don't push to history if we're currently undoing/redoing
     if (isUndoRedoRef.current) return;
@@ -81,7 +85,13 @@ export function useUndoRedo(options: UseUndoRedoOptions = {}) {
     setRedoStack([]);
   }, []);
 
-  // Keyboard shortcuts
+  // Keep refs updated with latest callbacks (avoids re-registering event listener)
+  useEffect(() => {
+    undoRef.current = undo;
+    redoRef.current = redo;
+  }, [undo, redo]);
+
+  // Keyboard shortcuts - registered once, uses refs for latest callbacks
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -89,20 +99,20 @@ export function useUndoRedo(options: UseUndoRedoOptions = {}) {
 
       if (modKey && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        undo();
+        undoRef.current();
       } else if (modKey && e.key === 'z' && e.shiftKey) {
         e.preventDefault();
-        redo();
+        redoRef.current();
       } else if (modKey && e.key === 'y' && !isMac) {
         // Ctrl+Y for redo on Windows/Linux
         e.preventDefault();
-        redo();
+        redoRef.current();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
+  }, []); // Empty deps - only register once
 
   return {
     pushAction,

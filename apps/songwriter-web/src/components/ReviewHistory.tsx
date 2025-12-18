@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useReviewHistory } from '@/lib/agentHooks';
+import { useReviewHistory } from '@/hooks/queries/agents';
 import { AgentTaskType } from '@/types/agent';
 
 interface ReviewHistoryProps {

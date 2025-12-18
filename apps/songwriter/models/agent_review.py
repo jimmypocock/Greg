@@ -9,6 +9,7 @@ from sqlalchemy import Column, Enum, text
 from sqlmodel import Field, SQLModel
 
 from apps.songwriter.enums import AgentTaskType, AgentType
+from apps.songwriter.models.utils import utc_now
 
 
 class AgentReview(SQLModel, table=True):
@@ -51,6 +52,6 @@ class AgentReview(SQLModel, table=True):
 
     # Timestamp
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         sa_column_kwargs={"server_default": text("now()")},
     )

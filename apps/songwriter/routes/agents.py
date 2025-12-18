@@ -14,6 +14,7 @@ Connect to WebSocket at /ws/jobs/{task_id} for real-time progress updates.
 """
 
 import logging
+from dataclasses import asdict
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Optional
@@ -23,15 +24,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.songwriter.constants import (
+    MAX_CHAT_MESSAGE_LENGTH,
+    MAX_CONVERSATION_HISTORY,
+)
+from apps.songwriter.dependencies import PermissionService
 from apps.songwriter.enums import AgentTaskType, AgentType
 from apps.songwriter.services.agent_review_store import AgentReviewStore
 from apps.songwriter.services.agent_runner import run_agent_task, run_chat_task
 from apps.songwriter.services.db_store import SongDBStore
+from apps.songwriter.services.permissions import Permission
+from packages.core.auth import CurrentUser
+from packages.core.billing import RequireAICredits
 from packages.core.database import get_session_dependency
 from packages.core.jobs import job_manager
-
-# Anonymous user ID for standalone songwriter app (no auth)
-ANONYMOUS_USER_ID = UUID("00000000-0000-0000-0000-000000000000")
 
 logger = logging.getLogger(__name__)
 
@@ -82,11 +88,16 @@ class ChatMessageRequest(BaseModel):
 class ChatRequest(BaseModel):
     """Request for conversational chat with the AI assistant."""
 
-    message: str = Field(..., min_length=1, max_length=2000, description="The user's message")
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_CHAT_MESSAGE_LENGTH,
+        description="The user's message",
+    )
     conversation_history: list[ChatMessageRequest] = Field(
         default_factory=list,
-        max_length=20,  # Limit to prevent context abuse
-        description="Previous conversation turns (limited to last 20 messages)",
+        max_length=MAX_CONVERSATION_HISTORY,
+        description=f"Previous conversation turns (limited to last {MAX_CONVERSATION_HISTORY} messages)",
     )
     llm: Optional[str] = Field(
         None,
@@ -149,8 +160,11 @@ class ReviewHistoryResponse(BaseModel):
 async def review_song(
     song_id: UUID,
     request: ReviewRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: Annotated[SongDBStore, Depends(get_db_store)],
     review_store: Annotated[AgentReviewStore, Depends(get_review_store)],
+    _credits: Annotated[None, Depends(RequireAICredits())],
 ):
     """
     Start a comprehensive review of a song from the Critic agent.
@@ -165,6 +179,9 @@ async def review_song(
     - Clichés and overused phrases
     - Specific actionable improvements
     """
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -181,7 +198,7 @@ async def review_song(
         song=song,
         task_type=AgentTaskType.FULL_REVIEW,
         review_store=review_store,
-        user_id=ANONYMOUS_USER_ID,
+        user_id=user.id,
         llm=request.llm,
     )
 
@@ -198,14 +215,20 @@ async def review_song(
 async def review_section(
     song_id: UUID,
     request: SectionReviewRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: Annotated[SongDBStore, Depends(get_db_store)],
     review_store: Annotated[AgentReviewStore, Depends(get_review_store)],
+    _credits: Annotated[None, Depends(RequireAICredits())],
 ):
     """
     Start review of a specific section of the song.
 
     Returns immediately with a task_id for WebSocket tracking.
     """
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -227,7 +250,7 @@ async def review_section(
         song=song,
         task_type=AgentTaskType.SECTION_REVIEW,
         review_store=review_store,
-        user_id=ANONYMOUS_USER_ID,
+        user_id=user.id,
         llm=request.llm,
         section_index=request.section_index,
     )
@@ -245,14 +268,20 @@ async def review_section(
 async def check_cliches(
     song_id: UUID,
     request: ReviewRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: Annotated[SongDBStore, Depends(get_db_store)],
     review_store: Annotated[AgentReviewStore, Depends(get_review_store)],
+    _credits: Annotated[None, Depends(RequireAICredits())],
 ):
     """
     Start a scan for clichés and overused phrases.
 
     Returns immediately with a task_id for WebSocket tracking.
     """
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -269,7 +298,7 @@ async def check_cliches(
         song=song,
         task_type=AgentTaskType.CHECK_CLICHES,
         review_store=review_store,
-        user_id=ANONYMOUS_USER_ID,
+        user_id=user.id,
         llm=request.llm,
     )
 
@@ -286,14 +315,20 @@ async def check_cliches(
 async def analyze_rhythm(
     song_id: UUID,
     request: ReviewRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: Annotated[SongDBStore, Depends(get_db_store)],
     review_store: Annotated[AgentReviewStore, Depends(get_review_store)],
+    _credits: Annotated[None, Depends(RequireAICredits())],
 ):
     """
     Start rhythm and meter analysis of the song.
 
     Returns immediately with a task_id for WebSocket tracking.
     """
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -310,7 +345,7 @@ async def analyze_rhythm(
         song=song,
         task_type=AgentTaskType.ANALYZE_RHYTHM,
         review_store=review_store,
-        user_id=ANONYMOUS_USER_ID,
+        user_id=user.id,
         llm=request.llm,
     )
 
@@ -327,7 +362,10 @@ async def analyze_rhythm(
 async def chat_with_song(
     song_id: UUID,
     request: ChatRequest,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: Annotated[SongDBStore, Depends(get_db_store)],
+    _credits: Annotated[None, Depends(RequireAICredits())],
 ):
     """
     Start a conversational chat session about the song.
@@ -344,6 +382,9 @@ async def chat_with_song(
     - History is limited to 20 messages to manage context
     - Messages are limited to 2000 characters
     """
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")
@@ -360,7 +401,7 @@ async def chat_with_song(
         song=song,
         user_message=request.message,
         conversation_history=conversation_history,
-        user_id=ANONYMOUS_USER_ID,
+        user_id=user.id,
         llm=request.llm,
     )
 
@@ -375,7 +416,10 @@ async def chat_with_song(
 
 
 @router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
-async def get_task_status(task_id: str):
+async def get_task_status(
+    task_id: str,
+    user: CurrentUser,
+):
     """
     Get the status of an agent task.
 
@@ -388,7 +432,7 @@ async def get_task_status(task_id: str):
     return TaskStatusResponse(
         task_id=task_id,
         status=job.status.value,
-        progress=job.progress.__dict__ if job.progress else None,
+        progress=asdict(job.progress) if job.progress else None,
         result=job.result,
         error=job.error,
     )
@@ -397,6 +441,8 @@ async def get_task_status(task_id: str):
 @router.get("/{song_id}/reviews", response_model=ReviewHistoryResponse)
 async def get_review_history(
     song_id: UUID,
+    user: CurrentUser,
+    permission_service: PermissionService,
     store: Annotated[SongDBStore, Depends(get_db_store)],
     review_store: Annotated[AgentReviewStore, Depends(get_review_store)],
     agent_type: Optional[AgentType] = None,
@@ -407,6 +453,9 @@ async def get_review_history(
 
     Optionally filter by agent type.
     """
+    # Check permission (raises 404 if song not found or no access)
+    await permission_service.require_permission(song_id, user.id, Permission.READ)
+
     song = await store.get(song_id)
     if not song:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Song not found")

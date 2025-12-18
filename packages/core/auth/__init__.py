@@ -35,6 +35,13 @@ from packages.core.auth.exceptions import (
     UserNotFoundError,
 )
 from packages.core.auth.handlers import register_auth_exception_handlers
+from packages.core.auth.internal_api import (
+    INTERNAL_API_KEY_HEADER,
+    RequireInternalOrAdmin,
+    check_internal_api_key,
+    require_internal_api_key,
+)
+from packages.core.auth.middleware import AuthMiddleware
 from packages.core.auth.refresh_tokens import (
     cleanup_expired_tokens,
     create_refresh_token,
@@ -91,6 +98,13 @@ __all__ = [
     "UserNotFoundError",
     # Exception handlers
     "register_auth_exception_handlers",
+    # Middleware
+    "AuthMiddleware",
+    # Internal API key
+    "INTERNAL_API_KEY_HEADER",
+    "RequireInternalOrAdmin",
+    "check_internal_api_key",
+    "require_internal_api_key",
     # FastAPI-Users
     "UserManager",
     "auth_backend",

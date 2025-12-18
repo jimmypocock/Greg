@@ -18,6 +18,7 @@ from packages.core.api.rate_limit import limiter
 from packages.core.admin import register_admin_exception_handlers
 from packages.core.api_keys import register_api_key_exception_handlers
 from packages.core.auth import register_auth_exception_handlers
+from packages.core.auth.middleware import AuthMiddleware
 from packages.core.config import Config
 from packages.core.jobs import register_job_exception_handlers
 from packages.core.api.routes import (
@@ -65,7 +66,10 @@ def create_core_app(
     # Configure CORS
     _configure_cors(app)
 
-    # Configure rate limiting
+    # Configure auth middleware (sets request.state.user for rate limiting)
+    app.add_middleware(AuthMiddleware)
+
+    # Configure rate limiting (per-user when authenticated)
     _configure_rate_limiting(app)
 
     # Configure core exception handlers

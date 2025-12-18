@@ -1,6 +1,6 @@
 'use client';
 
-import type { AgentProgress as AgentProgressType } from '@/lib/useAgentWebSocket';
+import type { AgentProgress as AgentProgressType } from '@/hooks/useAgentWebSocket';
 
 interface AgentProgressProps {
   progress: AgentProgressType;

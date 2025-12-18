@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useAgentTask } from '@/lib/agentHooks';
+import { useAgentTask } from '@/hooks/queries/agents';
 import { AgentProgress } from './AgentProgress';
 
 interface AgentReviewPanelProps {

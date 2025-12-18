@@ -1,10 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useSongs } from '@/lib/hooks';
+import { useSongs } from '@/hooks/queries/songs';
 import { SongCard } from '@/components/SongCard';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+import { UserMenu } from '@/components/auth/UserMenu';
 
 export default function Home() {
+  return (
+    <AuthGuard>
+      <HomeContent />
+    </AuthGuard>
+  );
+}
+
+function HomeContent() {
   const { data, isLoading, error } = useSongs();
 
   return (
@@ -13,12 +23,15 @@ export default function Home() {
         <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">Songwriter</h1>
-            <Link
-              href="/songs/new"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              New Song
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/songs/new"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                New Song
+              </Link>
+              <UserMenu />
+            </div>
           </div>
         </div>
       </header>

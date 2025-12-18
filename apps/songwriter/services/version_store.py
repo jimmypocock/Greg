@@ -1,6 +1,6 @@
 """Database-backed section version store."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -8,7 +8,12 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from apps.songwriter.models import Line, SectionVersion, SongSection
+from apps.songwriter.models import ChordPlacement, Line, SectionVersion, SongSection
+
+
+def utc_now() -> datetime:
+    """Get current UTC time (Python 3.12+ compatible)."""
+    return datetime.now(timezone.utc)
 
 
 class SectionVersionStore:
@@ -79,7 +84,7 @@ class SectionVersionStore:
             if hasattr(version, key) and key in ("name", "notes"):
                 setattr(version, key, value)
 
-        version.updated_at = datetime.utcnow()
+        version.updated_at = utc_now()
         await self.session.commit()
         await self.session.refresh(version)
         return version
@@ -136,7 +141,7 @@ class SectionVersionStore:
             is_main=False,
         )
 
-        # Copy lines
+        # Copy lines and their chords
         for line in source.lines:
             new_line = Line(
                 section_version_id=new_version.id,
@@ -145,9 +150,17 @@ class SectionVersionStore:
                 notes=line.notes,
             )
             self.session.add(new_line)
+            # Flush to get the new line ID
+            await self.session.flush()
 
-            # Note: We're not copying chords here to keep it simple
-            # Could be added later if needed
+            # Copy chords for this line
+            for chord in line.chords:
+                new_chord = ChordPlacement(
+                    line_id=new_line.id,
+                    chord=chord.chord,
+                    position=chord.position,
+                )
+                self.session.add(new_chord)
 
         await self.session.commit()
         return await self.get(new_version.id)
@@ -172,7 +185,7 @@ class SectionVersionStore:
 
         # Set this version as main
         version.is_main = True
-        version.updated_at = datetime.utcnow()
+        version.updated_at = utc_now()
 
         await self.session.commit()
         await self.session.refresh(version)

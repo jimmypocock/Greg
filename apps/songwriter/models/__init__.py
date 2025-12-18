@@ -7,8 +7,11 @@ from apps.songwriter.models.chord_placement import ChordPlacement
 from apps.songwriter.models.line import Line
 from apps.songwriter.models.section_version import SectionVersion
 from apps.songwriter.models.song import Song
+from apps.songwriter.models.song_collaborator import SongCollaborator
 from apps.songwriter.models.song_note import SongNote
 from apps.songwriter.models.song_section import SongSection
+from apps.songwriter.models.song_share_link import SongShareLink
+from apps.songwriter.models.yjs_document import YjsDocument
 
 # Request schemas (Pydantic only)
 from apps.songwriter.models.requests import (
@@ -32,8 +35,11 @@ __all__ = [
     "Line",
     "SectionVersion",
     "Song",
+    "SongCollaborator",
     "SongNote",
     "SongSection",
+    "SongShareLink",
+    "YjsDocument",
     # Request schemas (Pydantic)
     "AddChordRequest",
     "ChordPlacementRequest",

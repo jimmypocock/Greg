@@ -16,4 +16,5 @@ class SectionType(str, Enum):
     INSTRUMENTAL = "instrumental"
     SOLO = "solo"
     BREAKDOWN = "breakdown"
+    BRAIN_DUMP = "brain-dump"  # Unstructured content for brainstorming
     OTHER = "other"

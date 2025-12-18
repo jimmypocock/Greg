@@ -3,9 +3,19 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useCreateSongFromMarkdown } from '@/lib/hooks';
+import { useCreateSongFromMarkdown } from '@/hooks/queries/songs';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+import { UserMenu } from '@/components/auth/UserMenu';
 
 export default function NewSongPage() {
+  return (
+    <AuthGuard>
+      <NewSongPageContent />
+    </AuthGuard>
+  );
+}
+
+function NewSongPageContent() {
   const router = useRouter();
   const createSong = useCreateSongFromMarkdown();
   const [content, setContent] = useState('');
@@ -60,6 +70,7 @@ Bridge lyrics here`;
               </Link>
               <h1 className="text-2xl font-bold text-gray-900">New Song</h1>
             </div>
+            <UserMenu />
           </div>
         </div>
       </header>

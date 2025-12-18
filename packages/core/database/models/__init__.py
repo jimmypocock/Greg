@@ -5,7 +5,7 @@ One model per file for clean organization.
 """
 
 from packages.core.database.models.base import Base, TimestampMixin
-from packages.core.database.models.user import User, UserRole
+from packages.core.database.models.user import User, UserRole, UserPlan, PLAN_CREDITS
 from packages.core.database.models.invite import Invite
 from packages.core.database.models.api_key import APIKey
 from packages.core.database.models.ai_request import AIRequest, LLMProvider, RequestType
@@ -20,6 +20,8 @@ __all__ = [
     # User
     "User",
     "UserRole",
+    "UserPlan",
+    "PLAN_CREDITS",
     # Invite
     "Invite",
     # API Key

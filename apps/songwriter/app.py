@@ -9,8 +9,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from apps.songwriter.routes import agents, audio, notes, songs, versions
+from apps.songwriter.routes import agents, audio, billing, collaboration, notes, songs, versions, webhooks, yjs_websocket
 from packages.core.api.routes.websocket import router as websocket_router
+from packages.core.config import Config
 from packages.core.database import close_database, init_database
 
 
@@ -33,13 +34,20 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS for local development
+    # CORS configuration - use environment settings for production safety
+    # Set CORS_ALLOW_ALL=true for local development
+    # Set ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com for production
+    if Config.CORS_ALLOW_ALL:
+        allow_origins = ["*"]
+    else:
+        allow_origins = Config.ALLOWED_ORIGINS if Config.ALLOWED_ORIGINS else ["http://localhost:3000"]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=allow_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
     )
 
     # Register routes
@@ -48,6 +56,10 @@ def create_app() -> FastAPI:
     app.include_router(agents.router)
     app.include_router(audio.router)
     app.include_router(versions.router)
+    app.include_router(collaboration.router)
+    app.include_router(billing.router)
+    app.include_router(webhooks.router)
+    app.include_router(yjs_websocket.router)
     app.include_router(websocket_router)
 
     # Health check
