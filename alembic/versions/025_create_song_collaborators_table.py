@@ -31,10 +31,7 @@ TABLE_NAME = "song_collaborators"
 
 
 def upgrade() -> None:
-    """Create collaboratorrole enum and song_collaborators table."""
-
-    # Create the collaborator role enum
-    op.execute("CREATE TYPE collaboratorrole AS ENUM ('OWNER', 'EDITOR', 'VIEWER')")
+    """Create song_collaborators table (collaboratorrole enum created in migration 002)."""
 
     # Create table
     op.create_table(
@@ -46,10 +43,10 @@ def upgrade() -> None:
         sa.Column("song_id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.UUID(), nullable=False),
 
-        # Role
+        # Role (enum created in migration 002)
         sa.Column(
             "role",
-            postgresql.ENUM("OWNER", "EDITOR", "VIEWER", name="collaboratorrole", create_type=False),
+            postgresql.ENUM("owner", "editor", "viewer", name="collaboratorrole", create_type=False),
             nullable=False,
         ),
 
@@ -80,7 +77,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop song_collaborators table and collaboratorrole enum."""
+    """Drop song_collaborators table (collaboratorrole enum dropped in migration 002)."""
 
     drop_updated_at_trigger(TABLE_NAME)
 
@@ -89,5 +86,3 @@ def downgrade() -> None:
     op.drop_index(f"ix_{TABLE_NAME}_song_id", table_name=TABLE_NAME)
 
     op.drop_table(TABLE_NAME)
-
-    op.execute("DROP TYPE collaboratorrole")

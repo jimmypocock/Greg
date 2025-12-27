@@ -3,19 +3,18 @@
 Revision ID: 002
 Revises: 001
 Create Date: 2025-12-04
+
+Invites support three use cases:
+- Referral: Users share codes to earn credits when friends sign up
+- Collaboration: Invite non-users to collaborate on a specific song
+- Promo: Partnership/marketing codes for bonuses
 """
 
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
-from helpers import (
-    add_created_at_column,
-    add_updated_at_column,
-    create_updated_at_trigger,
-    drop_updated_at_trigger,
-)
+from helpers import create_updated_at_trigger, drop_updated_at_trigger
 
 
 revision: str = "002"
@@ -27,57 +26,59 @@ TABLE_NAME = "invites"
 
 
 def upgrade() -> None:
-    """Create invites table for user registration invitations."""
+    """Create invites table for referrals, collaboration, and promos."""
 
-    # Create table
-    op.create_table(
-        TABLE_NAME,
-        # Primary key
-        sa.Column("id", sa.UUID(), nullable=False),
+    # Create enums using raw SQL
+    op.execute("DO $$ BEGIN CREATE TYPE invitetype AS ENUM ('referral', 'collaboration', 'promo'); EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute("DO $$ BEGIN CREATE TYPE collaboratorrole AS ENUM ('owner', 'editor', 'viewer'); EXCEPTION WHEN duplicate_object THEN NULL; END $$")
 
-        # Invite identification
-        sa.Column("code", sa.String(length=32), nullable=False),
-        sa.Column("email", sa.String(length=255), nullable=True),
+    # Create table using raw SQL to avoid SQLAlchemy Enum auto-creation issues
+    op.execute("""
+        CREATE TABLE invites (
+            id UUID PRIMARY KEY,
+            code VARCHAR(32) NOT NULL,
+            type invitetype NOT NULL DEFAULT 'referral',
+            created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+            song_id UUID,
+            collaboration_role collaboratorrole,
+            referrer_credits INTEGER NOT NULL DEFAULT 0,
+            bonus_credits INTEGER NOT NULL DEFAULT 0,
+            max_uses INTEGER,
+            use_count INTEGER NOT NULL DEFAULT 0,
+            expires_at TIMESTAMPTZ,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            email VARCHAR(255),
+            promo_name VARCHAR(100),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """)
 
-        # Usage tracking
-        sa.Column("created_by", sa.UUID(), nullable=False),
-        sa.Column("used_by", sa.UUID(), nullable=True),
-        sa.Column("used_at", sa.DateTime(timezone=True), nullable=True),
+    # Create indices
+    op.execute(f"CREATE UNIQUE INDEX ix_{TABLE_NAME}_code ON {TABLE_NAME} (code)")
+    op.execute(f"CREATE INDEX ix_{TABLE_NAME}_type ON {TABLE_NAME} (type)")
+    op.execute(f"CREATE INDEX ix_{TABLE_NAME}_created_by ON {TABLE_NAME} (created_by)")
+    op.execute(f"CREATE INDEX ix_{TABLE_NAME}_song_id ON {TABLE_NAME} (song_id)")
+    op.execute(f"CREATE INDEX ix_{TABLE_NAME}_is_active ON {TABLE_NAME} (is_active)")
+    op.execute(f"CREATE INDEX ix_{TABLE_NAME}_promo_name ON {TABLE_NAME} (promo_name)")
 
-        # Validity
-        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
-
-        # Timestamps
-        add_created_at_column(),
-        add_updated_at_column(),
-
-        # Constraints
-        sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(["created_by"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["used_by"], ["users.id"], ondelete="SET NULL"),
-    )
-
-    # Create indices (naming: ix_{table}_{column})
-    op.create_index(f"ix_{TABLE_NAME}_code", TABLE_NAME, ["code"], unique=True)
-    op.create_index(f"ix_{TABLE_NAME}_created_by", TABLE_NAME, ["created_by"])
-    op.create_index(f"ix_{TABLE_NAME}_is_active", TABLE_NAME, ["is_active"])
-    op.create_index(f"ix_{TABLE_NAME}_expires_at", TABLE_NAME, ["expires_at"])
-    op.create_index(f"ix_{TABLE_NAME}_email", TABLE_NAME, ["email"])
-
-    # Create triggers
+    # Create updated_at trigger
     create_updated_at_trigger(TABLE_NAME)
 
 
 def downgrade() -> None:
-    """Drop invites table. Order: triggers -> indices -> table."""
+    """Drop invites table."""
 
     drop_updated_at_trigger(TABLE_NAME)
 
-    op.drop_index(f"ix_{TABLE_NAME}_email", table_name=TABLE_NAME)
-    op.drop_index(f"ix_{TABLE_NAME}_expires_at", table_name=TABLE_NAME)
-    op.drop_index(f"ix_{TABLE_NAME}_is_active", table_name=TABLE_NAME)
-    op.drop_index(f"ix_{TABLE_NAME}_created_by", table_name=TABLE_NAME)
-    op.drop_index(f"ix_{TABLE_NAME}_code", table_name=TABLE_NAME)
+    op.execute(f"DROP INDEX IF EXISTS ix_{TABLE_NAME}_promo_name")
+    op.execute(f"DROP INDEX IF EXISTS ix_{TABLE_NAME}_is_active")
+    op.execute(f"DROP INDEX IF EXISTS ix_{TABLE_NAME}_song_id")
+    op.execute(f"DROP INDEX IF EXISTS ix_{TABLE_NAME}_created_by")
+    op.execute(f"DROP INDEX IF EXISTS ix_{TABLE_NAME}_type")
+    op.execute(f"DROP INDEX IF EXISTS ix_{TABLE_NAME}_code")
 
-    op.drop_table(TABLE_NAME)
+    op.execute(f"DROP TABLE IF EXISTS {TABLE_NAME}")
+
+    op.execute("DROP TYPE IF EXISTS invitetype")
+    op.execute("DROP TYPE IF EXISTS collaboratorrole")

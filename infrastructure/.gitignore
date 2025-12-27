@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.js
+*.d.ts
+
+# CDK
+cdk.out/
+.cdk.staging/
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store

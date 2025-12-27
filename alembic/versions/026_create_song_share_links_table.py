@@ -39,12 +39,12 @@ def upgrade() -> None:
         # Unique share token
         sa.Column("token", sa.String(length=64), nullable=False),
 
-        # Role this link grants (reuses collaboratorrole enum from previous migration)
+        # Role this link grants (reuses collaboratorrole enum from migration 002)
         sa.Column(
             "role",
-            postgresql.ENUM("OWNER", "EDITOR", "VIEWER", name="collaboratorrole", create_type=False),
+            postgresql.ENUM("owner", "editor", "viewer", name="collaboratorrole", create_type=False),
             nullable=False,
-            server_default="VIEWER",
+            server_default="viewer",
         ),
 
         # Who created this link

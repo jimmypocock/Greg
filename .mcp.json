@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "quint-code": {
+      "command": "/Users/jimmypocock/.local/bin/quint-code",
+      "args": [
+        "serve"
+      ],
+      "cwd": "/Users/jimmypocock/Projects/AI/Greg",
+      "env": {
+        "QUINT_PROJECT_ROOT": "/Users/jimmypocock/Projects/AI/Greg"
+      }
+    }
+  }
+}

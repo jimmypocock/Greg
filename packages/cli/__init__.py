@@ -3,29 +3,26 @@
 Greg CLI Runner
 
 Commands:
-    dev         Start infrastructure, run migrations, and start API server
-    server      Start the Writer API server (port 8080)
-    songwriter  Start the Songwriter API server (port 8081)
-    frontend    Start the Next.js frontend (port 3000)
-    worker      Start the ARQ background worker
-    infra       Start PostgreSQL and Redis (docker-compose)
-    infra-stop  Stop infrastructure containers
-    migrate     Run database migrations
-    console     Interactive Python console with DB access
-    test        Run tests
-    models      List available LLM models
-    clean       Clean temporary files
-    help        Show this help message
+    infra         Start PostgreSQL and Redis (docker-compose)
+    infra-stop    Stop infrastructure containers
+    migrate       Run database migrations
+
+    songwriter    Start the Songwriter API server (port 8081)
+    songwriter-ui Start the Songwriter web frontend (port 3000)
+
+    worker        Start the ARQ background worker
+    console       Interactive Python console with DB access
+    test          Run tests
+    models        List available LLM models
+    clean         Clean temporary files
+    help          Show this help message
 
 Examples:
-    greg dev              # Full development environment
-    greg server           # Writer app (port 8080)
-    greg songwriter       # Songwriter app (port 8081)
-    greg frontend         # Next.js frontend (port 3000)
-    greg console          # Interactive DB console
-    greg worker           # Just the background worker
-    greg test             # Run test suite
-    greg test -k "test_auth"  # Run specific tests
+    greg infra && greg migrate   # Start infra and run migrations
+    greg songwriter              # Songwriter API (port 8081)
+    greg songwriter-ui           # Songwriter frontend (port 3000)
+    greg worker                  # Background job worker
+    greg test -k "test_auth"     # Run specific tests
 """
 
 import os
@@ -169,78 +166,17 @@ def cmd_migrate():
     run_cmd(["uv", "run", "alembic", "upgrade", "head"], check=True)
 
 
-def cmd_server():
-    """Start the API server (writer app)."""
-    print("Starting Greg API server...")
-    print("API docs at: http://localhost:8080/docs")
-    run_cmd(["uv", "run", "python", "main.py"])
-
-
 def cmd_songwriter():
     """Start the Songwriter app."""
     print("Starting Songwriter API server...")
     print("API docs at: http://localhost:8081/docs")
-    run_cmd(["uv", "run", "uvicorn", "apps.songwriter.app:app", "--port", "8081", "--reload"])
+    run_cmd(["uv", "run", "uvicorn", "api.app:app", "--port", "8081", "--reload"])
 
 
 def cmd_worker():
     """Start the ARQ background worker."""
     print("Starting ARQ worker...")
-    run_cmd(["uv", "run", "arq", "packages.core.jobs.worker.WorkerSettings"])
-
-
-def cmd_dev():
-    """Start full development environment."""
-    print("=" * 50)
-    print("Starting Greg Development Environment")
-    print("=" * 50)
-    print()
-
-    # Start infrastructure
-    if check_docker():
-        print("[1/4] Starting infrastructure...")
-        run_cmd(["docker", "compose", "up", "-d"])
-
-        # Wait for services
-        print("[2/4] Waiting for services...")
-        if not wait_for_postgres():
-            print("Error: PostgreSQL did not start in time")
-            sys.exit(1)
-        if not wait_for_redis():
-            print("Error: Redis did not start in time")
-            sys.exit(1)
-    else:
-        print("[1/4] Skipping infrastructure (Docker not available)")
-        print("  Make sure PostgreSQL and Redis are running manually")
-        print("[2/4] Skipping service wait")
-
-    # Run migrations
-    print("[3/4] Running migrations...")
-    run_cmd(["uv", "run", "alembic", "upgrade", "head"], check=True)
-
-    # Check Ollama
-    import shutil
-    if shutil.which("ollama"):
-        code, _, _ = run_silent(["ollama", "list"])
-        if code != 0:
-            print("  Starting Ollama...")
-            subprocess.Popen(
-                ["ollama", "serve"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            time.sleep(2)
-
-    # Start API server
-    print("[4/4] Starting API server...")
-    print()
-    print("=" * 50)
-    print("Greg is ready!")
-    print("  API: http://localhost:8080")
-    print("  Docs: http://localhost:8080/docs")
-    print("=" * 50)
-    print()
-    cmd_server()
+    run_cmd(["uv", "run", "arq", "api.jobs.worker.WorkerSettings"])
 
 
 def cmd_test(args: list[str] = None):
@@ -320,10 +256,10 @@ import asyncio
 from uuid import UUID
 
 # Database
-from packages.core.database import init_database, get_session
+from api.database import init_database, get_session
 
 # Songwriter models
-from apps.songwriter.models import (
+from api.models import (
     AgentReview,
     ChordPlacement,
     Line,
@@ -331,8 +267,8 @@ from apps.songwriter.models import (
     Song,
     SongSection,
 )
-from apps.songwriter.enums import AgentTaskType, AgentType, SectionType, SongStatus
-from apps.songwriter.services.db_store import SongDBStore
+from api.enums import AgentTaskType, AgentType, SectionType, SongStatus
+from api.services.db_store import SongDBStore
 
 # SQLAlchemy
 from sqlalchemy import select, delete, update, func
@@ -394,11 +330,11 @@ print()
         run_cmd(["uv", "run", "python", "-i", startup_file])
 
 
-def cmd_frontend():
+def cmd_songwriter_ui():
     """Start the Songwriter web frontend."""
-    frontend_dir = ROOT / "apps" / "songwriter-web"
+    frontend_dir = ROOT / "web"
     if not frontend_dir.exists():
-        print("Error: apps/songwriter-web directory not found")
+        print("Error: web/ directory not found")
         sys.exit(1)
 
     # Check for node_modules
@@ -409,7 +345,7 @@ def cmd_frontend():
             print("Error: Failed to install dependencies")
             sys.exit(1)
 
-    print("Starting Next.js frontend...")
+    print("Starting Songwriter UI...")
     print("Frontend: http://localhost:3000")
     subprocess.call(["npm", "run", "dev"], cwd=frontend_dir)
 
@@ -431,35 +367,23 @@ def main():
     args = sys.argv[2:]
 
     commands = {
-        # Development
-        "dev": cmd_dev,
-        "start": cmd_dev,  # Alias
-
-        # Individual services
-        "server": cmd_server,
-        "api": cmd_server,  # Alias
-        "writer": cmd_server,  # Alias
-        "songwriter": cmd_songwriter,
-        "frontend": cmd_frontend,
-        "web": cmd_frontend,  # Alias
-        "worker": cmd_worker,
-
         # Infrastructure
         "infra": cmd_infra,
         "infra-stop": cmd_infra_stop,
-        "up": cmd_infra,  # Alias
-        "down": cmd_infra_stop,  # Alias
 
         # Database
         "migrate": cmd_migrate,
-        "db": cmd_migrate,  # Alias
+
+        # Apps
+        "songwriter": cmd_songwriter,
+        "songwriter-ui": cmd_songwriter_ui,
+
+        # Background worker
+        "worker": cmd_worker,
+
+        # Development tools
         "console": cmd_console,
-        "c": cmd_console,  # Alias
-
-        # Testing
         "test": lambda: cmd_test(args),
-
-        # Utilities
         "models": cmd_models,
         "clean": cmd_clean,
 
