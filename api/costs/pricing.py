@@ -2,7 +2,7 @@
 LLM pricing configuration.
 
 Prices are in USD per 1 million tokens.
-Updated: December 2024
+Updated: December 2025
 """
 
 from decimal import Decimal
@@ -14,7 +14,7 @@ class ModelPricing(NamedTuple):
 
     input_per_million: Decimal  # USD per 1M input tokens
     output_per_million: Decimal  # USD per 1M output tokens
-    cached_per_million: Decimal | None = None  # USD per 1M cached tokens (Claude)
+    cached_per_million: Decimal | None = None  # USD per 1M cached tokens
 
 
 # Pricing per model (USD per 1M tokens)
@@ -44,26 +44,71 @@ MODEL_PRICING: dict[str, ModelPricing] = {
         output_per_million=Decimal("75.00"),
         cached_per_million=Decimal("1.50"),
     ),
-    # OpenAI GPT models
+    # OpenAI GPT-5 models (Dec 2025)
+    "gpt-5.2": ModelPricing(
+        input_per_million=Decimal("1.75"),
+        output_per_million=Decimal("14.00"),
+        cached_per_million=Decimal("0.175"),  # 90% cache discount
+    ),
+    "gpt-5.1": ModelPricing(
+        input_per_million=Decimal("1.25"),
+        output_per_million=Decimal("10.00"),
+        cached_per_million=Decimal("0.125"),
+    ),
+    "gpt-5": ModelPricing(
+        input_per_million=Decimal("1.25"),
+        output_per_million=Decimal("10.00"),
+        cached_per_million=Decimal("0.125"),
+    ),
+    "gpt-5-mini": ModelPricing(
+        input_per_million=Decimal("0.25"),
+        output_per_million=Decimal("2.00"),
+        cached_per_million=Decimal("0.025"),
+    ),
+    "gpt-5-nano": ModelPricing(
+        input_per_million=Decimal("0.05"),
+        output_per_million=Decimal("0.40"),
+        cached_per_million=Decimal("0.005"),
+    ),
+    # OpenAI GPT-4.1 models
+    "gpt-4.1": ModelPricing(
+        input_per_million=Decimal("2.00"),
+        output_per_million=Decimal("8.00"),
+        cached_per_million=Decimal("0.50"),
+    ),
+    "gpt-4.1-mini": ModelPricing(
+        input_per_million=Decimal("0.40"),
+        output_per_million=Decimal("1.60"),
+        cached_per_million=Decimal("0.10"),
+    ),
+    "gpt-4.1-nano": ModelPricing(
+        input_per_million=Decimal("0.10"),
+        output_per_million=Decimal("0.40"),
+        cached_per_million=Decimal("0.025"),
+    ),
+    # OpenAI GPT-4 models (legacy)
     "gpt-4o": ModelPricing(
         input_per_million=Decimal("2.50"),
         output_per_million=Decimal("10.00"),
+        cached_per_million=Decimal("1.25"),
     ),
     "gpt-4o-mini": ModelPricing(
         input_per_million=Decimal("0.15"),
         output_per_million=Decimal("0.60"),
+        cached_per_million=Decimal("0.075"),
     ),
-    "gpt-4-turbo": ModelPricing(
-        input_per_million=Decimal("10.00"),
-        output_per_million=Decimal("30.00"),
+    # OpenAI o-series reasoning models
+    "o3-mini": ModelPricing(
+        input_per_million=Decimal("1.10"),
+        output_per_million=Decimal("4.40"),
     ),
-    "gpt-4": ModelPricing(
-        input_per_million=Decimal("30.00"),
+    "o1": ModelPricing(
+        input_per_million=Decimal("15.00"),
         output_per_million=Decimal("60.00"),
     ),
-    "gpt-3.5-turbo": ModelPricing(
-        input_per_million=Decimal("0.50"),
-        output_per_million=Decimal("1.50"),
+    "o1-mini": ModelPricing(
+        input_per_million=Decimal("3.00"),
+        output_per_million=Decimal("12.00"),
     ),
     # Google Gemini models
     "gemini-1.5-pro": ModelPricing(

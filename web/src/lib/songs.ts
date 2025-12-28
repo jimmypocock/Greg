@@ -25,6 +25,8 @@ import {
   SongNoteUpdateRequest,
   ContextResponse,
   NoteType,
+  QuickStartRequest,
+  QuickStartResponse,
 } from '@/types';
 
 // List all songs
@@ -45,6 +47,11 @@ export async function createSong(data: SongCreateRequest): Promise<Song> {
 // Create a song from markdown
 export async function createSongFromMarkdown(content: string): Promise<Song> {
   return post<Song, MarkdownInput>('/songs/from-markdown', { content });
+}
+
+// Quick-start a new song for exploration
+export async function quickStartSong(data: QuickStartRequest = {}): Promise<QuickStartResponse> {
+  return post<QuickStartResponse, QuickStartRequest>('/songs/quick-start', data);
 }
 
 // Update a song

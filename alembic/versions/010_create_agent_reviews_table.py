@@ -28,14 +28,18 @@ TABLE_NAME = "agent_reviews"
 def upgrade() -> None:
     """Create agent_reviews table for storing AI agent feedback."""
 
-    # Create enums
+    # Create enums (all agent types and task types)
     op.execute(
-        "CREATE TYPE agenttype AS ENUM ('CRITIC', 'LYRICIST', 'STRUCTURE', 'MELODY')"
+        "CREATE TYPE agenttype AS ENUM ("
+        "'CRITIC', 'LYRICIST', 'STRUCTURE', 'MELODY', 'ORCHESTRATOR', 'SONG_SHAPER'"
+        ")"
     )
     op.execute(
         "CREATE TYPE agenttasktype AS ENUM ("
         "'FULL_REVIEW', 'SECTION_REVIEW', 'CHECK_CLICHES', 'ANALYZE_RHYTHM', "
-        "'WRITE_SECTION', 'SUGGEST_LYRICS', 'SUGGEST_CHORDS'"
+        "'STRUCTURE_ANALYSIS', 'CHAT', "
+        "'WRITE_SECTION', 'SUGGEST_LYRICS', 'SUGGEST_CHORDS', "
+        "'SHAPE_EXPLORATION'"
         ")"
     )
 
@@ -51,14 +55,19 @@ def upgrade() -> None:
         # Agent info
         sa.Column(
             "agent_type",
-            postgresql.ENUM("CRITIC", "LYRICIST", "STRUCTURE", "MELODY", name="agenttype", create_type=False),
+            postgresql.ENUM(
+                "CRITIC", "LYRICIST", "STRUCTURE", "MELODY", "ORCHESTRATOR", "SONG_SHAPER",
+                name="agenttype", create_type=False
+            ),
             nullable=False,
         ),
         sa.Column(
             "task_type",
             postgresql.ENUM(
                 "FULL_REVIEW", "SECTION_REVIEW", "CHECK_CLICHES", "ANALYZE_RHYTHM",
+                "STRUCTURE_ANALYSIS", "CHAT",
                 "WRITE_SECTION", "SUGGEST_LYRICS", "SUGGEST_CHORDS",
+                "SHAPE_EXPLORATION",
                 name="agenttasktype",
                 create_type=False,
             ),

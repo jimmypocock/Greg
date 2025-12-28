@@ -13,6 +13,7 @@ export enum SectionType {
   INSTRUMENTAL = 'instrumental',
   SOLO = 'solo',
   BREAKDOWN = 'breakdown',
+  BRAIN_DUMP = 'brain-dump',  // Unstructured content for brainstorming
   OTHER = 'other',
 }
 
@@ -32,6 +33,12 @@ export enum NoteType {
   TODO = 'TODO',
   FEEDBACK = 'FEEDBACK',
   OTHER = 'OTHER',
+  SONG_SHAPE = 'SONG_SHAPE',
+  // Shape exploration data (from AI shaper)
+  THEME = 'THEME',
+  KEY_IMAGE = 'KEY_IMAGE',
+  EMOTIONAL_ARC = 'EMOTIONAL_ARC',
+  FRAGMENT = 'FRAGMENT',
 }
 
 export interface ChordPlacement {
@@ -103,6 +110,7 @@ export interface Song {
   time_signature: string;
   feel?: string;
   sections: Section[];
+  song_notes?: SongNote[];
   status: SongStatus;
   notes?: string;
   created_at: string;

@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
 
-from api.api.rate_limit import limiter
+from api.core.rate_limit import limiter
 from api.auth.schemas import RegisterResponse, UserCreate
 from api.auth.users import UserManager, get_user_manager
 

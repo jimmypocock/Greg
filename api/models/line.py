@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import text as sa_text
+from sqlalchemy import Column, DateTime, text as sa_text
 from sqlmodel import Field, Relationship, SQLModel
 
 from api.models.utils import utc_now
@@ -29,14 +29,14 @@ class Line(SQLModel, table=True):
     # Notes for this specific line (e.g., "too cliché", "love this metaphor")
     notes: Optional[str] = None
 
-    # Timestamps
+    # Timestamps - must use timezone-aware columns to match utc_now()
     created_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": sa_text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=sa_text("now()")),
     )
     updated_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": sa_text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=sa_text("now()")),
     )
 
     # Relationships

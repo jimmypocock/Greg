@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { ChatMessage, QuickActionType } from '@/types/chat';
 
 // Generate unique message IDs using crypto.randomUUID()
-// This is safe for SSR and avoids module-level state
 function generateId(): string {
   return `msg-${crypto.randomUUID()}`;
 }
@@ -14,19 +13,27 @@ import {
   checkCliches,
   analyzeRhythm,
   chatWithSong,
+  getChatHistory,
+  clearChatHistory,
 } from '@/lib/agents';
 
 interface UseChatSessionOptions {
   songId: string;
+  onSongUpdated?: () => void; // Callback when song data changes
 }
 
-export function useChatSession({ songId }: UseChatSessionOptions) {
+export function useChatSession({ songId, onSongUpdated }: UseChatSessionOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentAssistantMessageId, setCurrentAssistantMessageId] = useState<string | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
 
   // Track the previous status to detect transitions
   const prevStatusRef = useRef<string>('idle');
+
+  // Track callback ref for onSongUpdated
+  const onSongUpdatedRef = useRef(onSongUpdated);
+  onSongUpdatedRef.current = onSongUpdated;
 
   // Handle agent error
   const handleError = useCallback((error: string) => {
@@ -45,11 +52,62 @@ export function useChatSession({ songId }: UseChatSessionOptions) {
     setCurrentAssistantMessageId(null);
   }, [currentAssistantMessageId]);
 
+  // Handle custom events like song.updated
+  const handleCustomEvent = useCallback((eventType: string, _data: unknown) => {
+    if (eventType === 'song.updated' && onSongUpdatedRef.current) {
+      onSongUpdatedRef.current();
+    }
+  }, []);
+
   const websocket = useAgentWebSocket({
     onError: handleError,
+    onCustomEvent: handleCustomEvent,
   });
 
   const { progress } = websocket;
+
+  // Load chat history from API on mount
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadHistory() {
+      try {
+        const response = await getChatHistory(songId);
+        if (mounted) {
+          // Convert API messages to ChatMessage format
+          const loadedMessages: ChatMessage[] = response.messages.map((msg) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.created_at),
+            metadata: msg.role === 'assistant' && (msg.input_tokens || msg.output_tokens || msg.total_cost_usd)
+              ? {
+                  duration_ms: msg.duration_ms,
+                  tokens: {
+                    input: msg.input_tokens || 0,
+                    output: msg.output_tokens || 0,
+                  },
+                  cost: msg.total_cost_usd,
+                }
+              : undefined,
+          }));
+          setMessages(loadedMessages);
+          setIsLoadingHistory(false);
+        }
+      } catch (error) {
+        console.error('Failed to load chat history:', error);
+        if (mounted) {
+          setIsLoadingHistory(false);
+        }
+      }
+    }
+
+    loadHistory();
+
+    return () => {
+      mounted = false;
+    };
+  }, [songId]);
 
   // Effect to persist streamed text when task completes
   useEffect(() => {
@@ -202,25 +260,16 @@ Focus on making the lyrics more vivid, emotional, and impactful without changing
 
     setIsProcessing(true);
 
-    // Add user message
+    // Add user message to local state for immediate display
     addUserMessage(content);
 
     // Add placeholder assistant message
     const assistantMsg = addAssistantMessage('', true);
 
     try {
-      // Build conversation history from previous messages (excluding the just-added user message)
-      // Limit to last 20 messages for context window management
-      const conversationHistory = messages
-        .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-        .slice(-20)
-        .map(msg => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        }));
-
-      // Call the chat endpoint with the new message and history
-      const response = await chatWithSong(songId, content, conversationHistory);
+      // Call the unified chat endpoint
+      // Note: Backend loads conversation history from database, no need to send it
+      const response = await chatWithSong(songId, content, []);
 
       // Connect to WebSocket for streaming
       websocket.connect(response.task_id);
@@ -234,16 +283,24 @@ Focus on making the lyrics more vivid, emotional, and impactful without changing
         isStreaming: false,
       });
     }
-  }, [songId, isProcessing, messages, addUserMessage, addAssistantMessage, updateAssistantMessage, websocket]);
+  }, [songId, isProcessing, addUserMessage, addAssistantMessage, updateAssistantMessage, websocket]);
 
-  const clearHistory = useCallback(() => {
-    setMessages([]);
-    websocket.reset();
-  }, [websocket]);
+  const clearHistory = useCallback(async () => {
+    try {
+      // Clear history from server
+      await clearChatHistory(songId);
+      // Clear local state
+      setMessages([]);
+      websocket.reset();
+    } catch (error) {
+      console.error('Failed to clear chat history:', error);
+    }
+  }, [songId, websocket]);
 
   return {
     messages,
     isProcessing,
+    isLoadingHistory,
     progress: websocket.progress,
     currentAssistantMessageId,
     sendMessage,

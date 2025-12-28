@@ -2,7 +2,7 @@
 API route modules for core functionality.
 """
 
-from api.api.routes import (
+from api.core.routes import (
     admin,
     api_keys,
     auth,

@@ -75,7 +75,7 @@ PLANS = [
     PlanInfo(
         id="pro",
         name="Pro",
-        price_monthly=1000,  # $10.00
+        price_monthly=2000,  # $20.00
         credits_per_month=PLAN_CREDITS[UserPlan.PRO],
         features=[
             "Everything in Free",
@@ -83,19 +83,6 @@ PLANS = [
             "Real-time collaboration",
             "Share links",
             "Priority support",
-        ],
-    ),
-    PlanInfo(
-        id="enterprise",
-        name="Enterprise",
-        price_monthly=2500,  # $25.00
-        credits_per_month=PLAN_CREDITS[UserPlan.ENTERPRISE],
-        features=[
-            "Everything in Pro",
-            f"{PLAN_CREDITS[UserPlan.ENTERPRISE]} AI credits/month",
-            "Team workspaces",
-            "Advanced analytics",
-            "Dedicated support",
         ],
     ),
 ]
@@ -148,7 +135,7 @@ class CheckoutRequest(BaseModel):
 
     success_url: str = Field(..., description="URL to redirect after successful payment")
     cancel_url: str = Field(..., description="URL to redirect if user cancels")
-    plan: str = Field(default="pro", description="Plan to subscribe to (pro or enterprise)")
+    plan: str = Field(default="pro", description="Plan to subscribe to")
 
 
 class CheckoutResponse(BaseModel):
@@ -195,18 +182,10 @@ def _get_price_id_for_plan(plan: str) -> str:
                 detail="Pro plan price not configured. Set STRIPE_PRICE_ID_PRO in environment.",
             )
         return Config.STRIPE_PRICE_ID_PRO
-    elif plan == "enterprise":
-        # Enterprise has its own price ID
-        if not Config.STRIPE_PRICE_ID_ENTERPRISE:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Enterprise plan not available for self-service signup.",
-            )
-        return Config.STRIPE_PRICE_ID_ENTERPRISE
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown plan: {plan}. Available: pro, enterprise",
+            detail=f"Unknown plan: {plan}. Available: pro",
         )
 
 

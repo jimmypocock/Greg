@@ -2,7 +2,7 @@
  * Authentication types for the Songwriter app.
  */
 
-export type UserPlan = 'free' | 'pro' | 'enterprise';
+export type UserPlan = 'free' | 'pro';
 export type UserRole = 'user' | 'admin';
 
 export interface User {

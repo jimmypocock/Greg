@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Column, Enum, text
+from sqlalchemy import Column, DateTime, Enum, text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlmodel import Field, Relationship, SQLModel
 
 from api.enums import SongStatus
@@ -26,8 +27,13 @@ class Song(SQLModel, table=True):
     title: str = Field(max_length=200)
     raw_input: Optional[str] = None
 
-    # Owner - nullable initially for migration, will be NOT NULL after data migration
-    owner_id: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id", index=True)
+    # Owner - foreign key constraint defined in database migration
+    # Using sa_column to avoid SQLModel's string-based FK resolution which fails
+    # when User model is in a different metadata registry (SQLAlchemy vs SQLModel)
+    owner_id: Optional[uuid.UUID] = Field(
+        default=None,
+        sa_column=Column(PGUUID(as_uuid=True), nullable=True, index=True),
+    )
 
     # Musical metadata
     key: Optional[str] = Field(default=None, max_length=20)
@@ -48,14 +54,14 @@ class Song(SQLModel, table=True):
     # Quick notes field (for simple brain dump)
     notes: Optional[str] = None
 
-    # Timestamps
+    # Timestamps - must use timezone-aware columns to match utc_now()
     created_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
     updated_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
 
     # Relationships

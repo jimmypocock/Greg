@@ -1,8 +1,13 @@
 """Songwriter models."""
 
+# IMPORTANT: Import User model first to ensure it's registered before Song
+# models that have foreign keys to users.id are loaded
+from api.database.models import User  # noqa: F401
+
 # SQLModel models (API + DB)
 from api.models.agent_review import AgentReview
 from api.models.audio_file import AudioFile
+from api.models.chat_message import ChatMessage
 from api.models.chord_placement import ChordPlacement
 from api.models.line import Line
 from api.models.section_version import SectionVersion
@@ -31,6 +36,7 @@ __all__ = [
     # SQLModel models (database tables)
     "AgentReview",
     "AudioFile",
+    "ChatMessage",
     "ChordPlacement",
     "Line",
     "SectionVersion",

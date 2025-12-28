@@ -15,6 +15,11 @@ import type {
   SectionReviewRequest,
   TaskStatusResponse,
 } from '@/types/agent';
+import type {
+  FinalizeShapeResponse,
+  ShapeChatRequest,
+  SongShape,
+} from '@/types/shape';
 
 /**
  * Start a full song review from the Critic agent.
@@ -113,4 +118,102 @@ export async function getReviewHistory(
   const queryString = params.toString();
   if (queryString) path += `?${queryString}`;
   return get<ReviewHistoryResponse>(path);
+}
+
+// =============================================================================
+// Song Shape / Exploration Functions
+// =============================================================================
+
+/**
+ * Start a song shape exploration chat session.
+ *
+ * The song shaper agent guides the user through discovering their song's
+ * structure without writing lyrics. It asks questions, identifies patterns,
+ * and builds an incremental "song shape".
+ *
+ * Returns immediately with a task_id for tracking progress via WebSocket.
+ */
+export async function exploreSongShape(
+  songId: string,
+  message: string,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+  options: { llm?: string } = {}
+): Promise<AgentTaskResponse> {
+  const request: ShapeChatRequest = {
+    message,
+    conversation_history: conversationHistory,
+    llm: options.llm,
+  };
+  return post<AgentTaskResponse, ShapeChatRequest>(`/agents/${songId}/shape`, request);
+}
+
+/**
+ * Get the current song shape.
+ *
+ * Returns the shape data discovered during exploration, including:
+ * - Theme and notes
+ * - Key images and phrases
+ * - Emotional arc
+ * - References
+ * - Suggested structure
+ */
+export async function getSongShape(songId: string): Promise<SongShape> {
+  return get<SongShape>(`/agents/${songId}/shape`);
+}
+
+/**
+ * Finalize the song shape and create actual sections.
+ *
+ * This converts the suggested structure from exploration into
+ * real song sections, transitioning from exploration to writing mode.
+ */
+export async function finalizeSongShape(songId: string): Promise<FinalizeShapeResponse> {
+  return post<FinalizeShapeResponse, Record<string, never>>(
+    `/agents/${songId}/shape/finalize`,
+    {}
+  );
+}
+
+// =============================================================================
+// Chat History Functions
+// =============================================================================
+
+export interface ChatHistoryMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_cost_usd?: string;
+  duration_ms?: number;
+  model?: string;
+  created_at: string;
+}
+
+export interface ChatHistoryResponse {
+  song_id: string;
+  messages: ChatHistoryMessage[];
+}
+
+/**
+ * Get chat history for a song.
+ * Returns all messages in chronological order.
+ */
+export async function getChatHistory(songId: string, limit = 100): Promise<ChatHistoryResponse> {
+  return get<ChatHistoryResponse>(`/agents/${songId}/chat/history?limit=${limit}`);
+}
+
+/**
+ * Clear chat history for a song.
+ * Returns the number of messages deleted.
+ */
+export async function clearChatHistory(songId: string): Promise<{ deleted: number }> {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agents/${songId}/chat/history`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to clear chat history');
+  }
+  return response.json();
 }

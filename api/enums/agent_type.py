@@ -11,3 +11,4 @@ class AgentType(str, Enum):
     STRUCTURE = "structure"
     MELODY = "melody"
     ORCHESTRATOR = "orchestrator"
+    SONG_SHAPER = "song_shaper"  # Guides new song exploration without writing lyrics

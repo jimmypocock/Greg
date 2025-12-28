@@ -6,8 +6,10 @@ Runs agent tasks asynchronously and streams updates via WebSocket.
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable
 from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.agents.workflow import (
     run_critic_workflow,
@@ -19,11 +21,15 @@ from api.agents.workflow import (
 from api.enums import AgentTaskType, AgentType
 from api.models import Song
 from api.services.agent_review_store import AgentReviewStore
+from api.services.chat_history_store import ChatHistoryStore
 from api.jobs import job_manager
 from api.jobs.models import JobType
 from api.websocket import connection_manager
 
 logger = logging.getLogger(__name__)
+
+# Type alias for session factory
+SessionFactory = Callable[[], AsyncSession]
 
 
 def _task_exception_handler(task: asyncio.Task[Any]) -> None:
@@ -176,18 +182,27 @@ async def run_chat_task(
     song: Song,
     user_message: str,
     conversation_history: list[dict],
+    session_factory: SessionFactory,
     user_id: UUID,
     llm: str | None = None,
+    song_id: UUID | None = None,
 ) -> str:
     """
-    Run a chat task with the orchestrator agent.
+    Run a chat task with the unified orchestrator agent.
+
+    The orchestrator adapts its behavior based on context:
+    - Exploration: Asks questions, builds understanding (for new songs)
+    - Writing: Creates sections, drafts lyrics
+    - Refinement: Gives feedback, improves content (for songs with content)
 
     Args:
         song: The song context
         user_message: The user's message
         conversation_history: Previous conversation turns [{role, content}]
+        session_factory: Factory for creating database sessions (for tools that modify song)
         user_id: ID of the user running the task
         llm: Optional LLM to use
+        song_id: Song ID for persisting assistant response to chat history
 
     Returns:
         task_id that can be used to track progress via WebSocket
@@ -202,7 +217,9 @@ async def run_chat_task(
             song=song,
             user_message=user_message,
             conversation_history=conversation_history,
+            session_factory=session_factory,
             llm=llm,
+            song_id=song_id,
         ),
         name=f"chat_task_{task_id}",
     )
@@ -216,7 +233,9 @@ async def _run_chat_task_async(
     song: Song,
     user_message: str,
     conversation_history: list[dict],
+    session_factory: SessionFactory,
     llm: str | None,
+    song_id: UUID | None = None,
 ) -> None:
     """Run the chat task asynchronously with streaming."""
     try:
@@ -235,14 +254,33 @@ async def _run_chat_task_async(
         def sync_on_event(event: AgentEvent):
             asyncio.create_task(on_event(event))
 
-        # Run the orchestrator workflow
+        # Run the unified orchestrator workflow
         result = await run_orchestrator_workflow(
             song=song,
             user_message=user_message,
             conversation_history=conversation_history,
+            session_factory=session_factory,
             model=llm,
             on_event=sync_on_event,
         )
+
+        # Save assistant response to chat history
+        if song_id and result.success and result.result:
+            try:
+                async with session_factory() as session:
+                    chat_store = ChatHistoryStore(session)
+                    await chat_store.add_message(
+                        song_id=song_id,
+                        role="assistant",
+                        content=result.result,
+                        input_tokens=result.input_tokens,
+                        output_tokens=result.output_tokens,
+                        total_cost_usd=result.total_cost_usd,
+                        duration_ms=result.duration_ms,
+                        model=result.model,
+                    )
+            except Exception as save_error:
+                logger.warning(f"Failed to save assistant message to history: {save_error}")
 
         # Complete the job
         await job_manager.complete_job(
@@ -269,3 +307,7 @@ async def _run_chat_task_async(
         )
 
         await job_manager.fail_job(task_id, str(e))
+
+
+# Backward compatibility alias
+run_shaper_task = run_chat_task

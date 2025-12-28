@@ -32,16 +32,14 @@ class UserRole(str, PyEnum):
 class UserPlan(str, PyEnum):
     """Subscription plans with different AI usage limits."""
 
-    FREE = "free"       # 10 AI credits/month
-    PRO = "pro"         # 200 AI credits/month
-    ENTERPRISE = "enterprise"  # 500 AI credits/month
+    FREE = "free"  # 50 AI credits/month
+    PRO = "pro"    # 500 AI credits/month ($20/month)
 
 
 # AI credit limits per plan per month
 PLAN_CREDITS = {
-    UserPlan.FREE: 10,
-    UserPlan.PRO: 200,
-    UserPlan.ENTERPRISE: 500,
+    UserPlan.FREE: 50,
+    UserPlan.PRO: 500,
 }
 
 

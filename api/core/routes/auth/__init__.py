@@ -7,7 +7,7 @@ and two-factor authentication routes under /auth prefix.
 
 from fastapi import APIRouter
 
-from api.api.routes.auth import me, registration, sessions, token, two_factor, users
+from api.core.routes.auth import me, registration, sessions, token, two_factor, users
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 

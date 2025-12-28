@@ -338,6 +338,80 @@ async def create_song(
     return SongResponse.from_song(song)
 
 
+class QuickStartRequest(BaseModel):
+    """Request for quick-starting a new song for exploration."""
+
+    title: str = Field(
+        default="Untitled Song",
+        min_length=1,
+        max_length=200,
+        description="Initial title for the song",
+    )
+    initial_input: Optional[str] = Field(
+        None,
+        max_length=5000,
+        description="Optional initial input (theme, fragments, feelings, etc.)",
+    )
+
+
+class QuickStartResponse(BaseModel):
+    """Response from quick-starting a new song."""
+
+    song_id: UUID
+    title: str
+    message: str = "Song created. Ready for exploration."
+
+
+@router.post("/quick-start", response_model=QuickStartResponse, status_code=status.HTTP_201_CREATED)
+async def quick_start_song(
+    request: QuickStartRequest,
+    user: CurrentUser,
+    store: Annotated[SongDBStore, Depends(get_db_store)],
+    session: Annotated[AsyncSession, Depends(get_session_dependency)],
+):
+    """
+    Quick-start a new song for the exploration phase.
+
+    Creates an empty song ready for conversational exploration.
+    The unified orchestrator will adapt its behavior based on context:
+    - Start by asking exploratory questions
+    - Create sections and content when the user is ready
+
+    This is designed for the "Explore with AI" flow where the user
+    starts with an idea and the AI helps shape the song.
+    """
+    song = Song(
+        title=request.title,
+        raw_input=request.initial_input,
+        status=SongStatus.IDEA,
+        owner_id=user.id,
+    )
+
+    song = await store.create(song)
+
+    # Create owner collaborator record
+    from api.models.utils import utc_now
+    collaborator = SongCollaborator(
+        song_id=song.id,
+        user_id=user.id,
+        role=CollaboratorRole.OWNER,
+        invited_by=None,
+        accepted_at=utc_now(),
+    )
+    session.add(collaborator)
+    await session.commit()
+
+    # No sections created - the orchestrator will create them during conversation
+    # based on user exploration
+
+    logger.info(f"Quick-started song: {song.title} ({song.id}) by user {user.email}")
+
+    return QuickStartResponse(
+        song_id=song.id,
+        title=song.title,
+    )
+
+
 class MarkdownInput(BaseModel):
     """Markdown content to parse into a song."""
 

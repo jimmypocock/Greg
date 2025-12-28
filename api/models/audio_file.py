@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Column, Enum, text
+from sqlalchemy import Column, DateTime, Enum, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from api.enums import AnalysisStatus
@@ -65,14 +65,14 @@ class AudioFile(SQLModel, table=True):
     # If true, auto-apply detected values to song metadata
     is_reference: bool = Field(default=False)
 
-    # Timestamps
+    # Timestamps - must use timezone-aware columns to match utc_now()
     created_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
     updated_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
 
     # Relationships

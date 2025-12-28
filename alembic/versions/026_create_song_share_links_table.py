@@ -42,9 +42,9 @@ def upgrade() -> None:
         # Role this link grants (reuses collaboratorrole enum from migration 002)
         sa.Column(
             "role",
-            postgresql.ENUM("owner", "editor", "viewer", name="collaboratorrole", create_type=False),
+            postgresql.ENUM("OWNER", "EDITOR", "VIEWER", name="collaboratorrole", create_type=False),
             nullable=False,
-            server_default="viewer",
+            server_default="VIEWER",
         ),
 
         # Who created this link

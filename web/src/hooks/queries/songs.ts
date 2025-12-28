@@ -8,6 +8,7 @@ import {
   getSong,
   createSong,
   createSongFromMarkdown,
+  quickStartSong,
   updateSong,
   deleteSong,
   suggestStructure,
@@ -79,6 +80,17 @@ export function useCreateSongFromMarkdown() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (content: string) => createSongFromMarkdown(content),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: songKeys.lists() });
+    },
+  });
+}
+
+// Quick start a new song (creates empty song for AI exploration)
+export function useQuickStartSong() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data?: { title?: string; initial_input?: string }) => quickStartSong(data || {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: songKeys.lists() });
     },

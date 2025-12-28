@@ -36,7 +36,7 @@ def upgrade() -> None:
     # Create enum for note types
     op.execute(
         "CREATE TYPE notetype AS ENUM ("
-        "'IDEA', 'INSPIRATION', 'REFERENCE', 'CONTEXT', 'TODO', 'FEEDBACK', 'OTHER'"
+        "'IDEA', 'INSPIRATION', 'REFERENCE', 'CONTEXT', 'TODO', 'FEEDBACK', 'OTHER', 'SONG_SHAPE'"
         ")"
     )
 
@@ -56,7 +56,7 @@ def upgrade() -> None:
         sa.Column(
             "note_type",
             postgresql.ENUM(
-                "IDEA", "INSPIRATION", "REFERENCE", "CONTEXT", "TODO", "FEEDBACK", "OTHER",
+                "IDEA", "INSPIRATION", "REFERENCE", "CONTEXT", "TODO", "FEEDBACK", "OTHER", "SONG_SHAPE",
                 name="notetype",
                 create_type=False,
             ),

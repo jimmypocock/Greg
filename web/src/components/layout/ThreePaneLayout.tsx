@@ -14,10 +14,13 @@ interface ThreePaneLayoutProps {
   minRightWidth?: number;
   maxRightWidth?: number;
   minCenterWidth?: number;
+  leftPanelOpen?: boolean;
+  onLeftPanelToggle?: (open: boolean) => void;
   rightPanelOpen?: boolean;
   onRightPanelToggle?: (open: boolean) => void;
   storageKeyLeft?: string;
   storageKeyRight?: string;
+  storageKeyLeftOpen?: string;
   storageKeyRightOpen?: string;
 }
 
@@ -25,25 +28,31 @@ export function ThreePaneLayout({
   leftPanel,
   centerPanel,
   rightPanel,
-  defaultLeftWidth = 420,
-  minLeftWidth = 320,
-  maxLeftWidth = 600,
+  defaultLeftWidth = 380,
+  minLeftWidth = 300,
+  maxLeftWidth = 500,
   defaultRightWidth = 380,
   minRightWidth = 300,
   maxRightWidth = 500,
   minCenterWidth = 300,
+  leftPanelOpen: controlledLeftPanelOpen,
+  onLeftPanelToggle,
   rightPanelOpen: controlledRightPanelOpen,
   onRightPanelToggle,
   storageKeyLeft = 'three-pane-left-width',
   storageKeyRight = 'three-pane-right-width',
+  storageKeyLeftOpen = 'three-pane-left-open',
   storageKeyRightOpen = 'three-pane-right-open',
 }: ThreePaneLayoutProps) {
   const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
   const [rightWidth, setRightWidth] = useState(defaultRightWidth);
+  const [internalLeftOpen, setInternalLeftOpen] = useState(true);
   const [internalRightOpen, setInternalRightOpen] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Use controlled or internal state for right panel
+  // Use controlled or internal state for panels
+  const leftOpen = controlledLeftPanelOpen ?? internalLeftOpen;
+  const setLeftOpen = onLeftPanelToggle ?? setInternalLeftOpen;
   const rightOpen = controlledRightPanelOpen ?? internalRightOpen;
   const setRightOpen = onRightPanelToggle ?? setInternalRightOpen;
 
@@ -65,13 +74,18 @@ export function ThreePaneLayout({
       }
     }
 
+    const storedLeftOpen = localStorage.getItem(storageKeyLeftOpen);
+    if (storedLeftOpen !== null) {
+      setInternalLeftOpen(storedLeftOpen === 'true');
+    }
+
     const storedRightOpen = localStorage.getItem(storageKeyRightOpen);
     if (storedRightOpen !== null) {
       setInternalRightOpen(storedRightOpen === 'true');
     }
 
     setIsInitialized(true);
-  }, [storageKeyLeft, storageKeyRight, storageKeyRightOpen, minLeftWidth, maxLeftWidth, minRightWidth, maxRightWidth]);
+  }, [storageKeyLeft, storageKeyRight, storageKeyLeftOpen, storageKeyRightOpen, minLeftWidth, maxLeftWidth, minRightWidth, maxRightWidth]);
 
   // Handle left resize
   const handleLeftResize = useCallback((delta: number) => {
@@ -104,7 +118,13 @@ export function ThreePaneLayout({
     localStorage.setItem(storageKeyRight, String(rightWidth));
   }, [storageKeyRight, rightWidth]);
 
-  // Save right panel open state
+  // Save panel open states
+  useEffect(() => {
+    if (isInitialized) {
+      localStorage.setItem(storageKeyLeftOpen, String(leftOpen));
+    }
+  }, [leftOpen, storageKeyLeftOpen, isInitialized]);
+
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem(storageKeyRightOpen, String(rightOpen));
@@ -122,25 +142,29 @@ export function ThreePaneLayout({
 
   return (
     <div className="flex-1 flex overflow-hidden bg-gray-100 dark:bg-gray-900 min-h-0">
-      {/* Left Panel - Toolbox */}
-      <div
-        style={{ width: leftWidth }}
-        className="flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-hidden min-h-0"
-      >
-        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-          {leftPanel}
-        </div>
-      </div>
+      {/* Left Panel (when open) */}
+      {leftOpen && (
+        <>
+          <div
+            style={{ width: leftWidth }}
+            className="flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-hidden min-h-0"
+          >
+            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+              {leftPanel}
+            </div>
+          </div>
 
-      {/* Left Resize Handle */}
-      <ResizeHandle onResize={handleLeftResize} onResizeEnd={handleLeftResizeEnd} />
+          {/* Left Resize Handle */}
+          <ResizeHandle onResize={handleLeftResize} onResizeEnd={handleLeftResizeEnd} />
+        </>
+      )}
 
-      {/* Center Panel - Live Preview */}
+      {/* Center Panel - Editor */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden min-h-0">
         {centerPanel}
       </div>
 
-      {/* Right Panel - AI Chat (when open) */}
+      {/* Right Panel (when open) */}
       {rightOpen && (
         <>
           {/* Right Resize Handle */}

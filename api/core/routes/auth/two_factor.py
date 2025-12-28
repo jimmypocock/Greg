@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.api.rate_limit import limiter
+from api.core.rate_limit import limiter
 from api.auth import CurrentUser
 from api.auth.refresh_tokens import create_refresh_token
 from api.auth.users import UserManager, get_jwt_strategy, get_user_manager, SECRET_KEY

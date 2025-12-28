@@ -13,15 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from api.api.lifespan import lifespan
-from api.api.rate_limit import limiter
+from api.core.lifespan import lifespan
+from api.core.rate_limit import limiter
 from api.admin import register_admin_exception_handlers
 from api.api_keys import register_api_key_exception_handlers
 from api.auth import register_auth_exception_handlers
 from api.auth.middleware import AuthMiddleware
 from api.config import Config
 from api.jobs import register_job_exception_handlers
-from api.api.routes import (
+from api.core.routes import (
     admin,
     api_keys,
     auth,

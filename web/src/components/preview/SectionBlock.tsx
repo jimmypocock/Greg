@@ -780,6 +780,13 @@ export function SectionBlock({
         )}
       </div>
 
+      {/* Section Intent/Notes */}
+      {section.notes && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 italic pl-1 mb-1">
+          {section.notes}
+        </p>
+      )}
+
       {/* Lines */}
       <div className="font-mono text-sm pl-1">
         {section.lines.length === 0 ? (

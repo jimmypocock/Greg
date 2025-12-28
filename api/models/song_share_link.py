@@ -5,7 +5,8 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, Enum, text
+from sqlalchemy import Column, DateTime, Enum, text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlmodel import Field, SQLModel
 
 from api.enums import CollaboratorRole
@@ -43,10 +44,16 @@ class SongShareLink(SQLModel, table=True):
     )
 
     # Who created this link
-    created_by: uuid.UUID = Field(foreign_key="users.id")
+    # Foreign key constraint defined in database migration
+    created_by: uuid.UUID = Field(
+        sa_column=Column(PGUUID(as_uuid=True), nullable=False),
+    )
 
     # Optional expiration
-    expires_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
 
     # Usage limits
     max_uses: Optional[int] = None  # null = unlimited
@@ -55,10 +62,10 @@ class SongShareLink(SQLModel, table=True):
     # Can be deactivated without deleting
     is_active: bool = Field(default=True)
 
-    # Timestamps
+    # Timestamp - must use timezone-aware column to match utc_now()
     created_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
 
     @property

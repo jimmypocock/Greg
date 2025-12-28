@@ -26,7 +26,7 @@ export interface CreditsInfo {
 export interface CheckoutRequest {
   success_url: string;
   cancel_url: string;
-  plan: 'pro' | 'enterprise';
+  plan: 'pro';
 }
 
 export interface CheckoutResponse {

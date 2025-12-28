@@ -46,15 +46,20 @@ export function SectionEditor({ section, onUpdateLine, onAddLine }: SectionEdito
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">{fullLabel}</h3>
-        {onAddLine && (
-          <button
-            onClick={() => onAddLine(section.id)}
-            className="text-xs text-indigo-600 hover:text-indigo-800"
-          >
-            + Add line
-          </button>
+      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-700">{fullLabel}</h3>
+          {onAddLine && (
+            <button
+              onClick={() => onAddLine(section.id)}
+              className="text-xs text-indigo-600 hover:text-indigo-800"
+            >
+              + Add line
+            </button>
+          )}
+        </div>
+        {section.notes && (
+          <p className="text-xs text-gray-500 mt-1 italic">{section.notes}</p>
         )}
       </div>
       <div className="p-4 space-y-1 font-mono text-sm">

@@ -38,18 +38,19 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # Create embedding provider enum using raw SQL for proper IF NOT EXISTS
+    # Use uppercase values to match Python enum names (SQLAlchemy default behavior)
     op.execute("""
         DO $$
         BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'embedding_provider_enum') THEN
-                CREATE TYPE embedding_provider_enum AS ENUM ('local', 'openai');
+                CREATE TYPE embedding_provider_enum AS ENUM ('LOCAL', 'OPENAI');
             END IF;
         END$$
     """)
 
     # Reference the existing enum (don't auto-create)
     embedding_provider_enum = postgresql.ENUM(
-        'local', 'openai',
+        'LOCAL', 'OPENAI',
         name='embedding_provider_enum',
         create_type=False  # Don't auto-create, we did it above
     )
@@ -80,7 +81,7 @@ def upgrade() -> None:
             "embedding_provider",
             embedding_provider_enum,
             nullable=False,
-            server_default="local"
+            server_default="LOCAL"
         ),
 
         # Chunk metadata (page number, section headers, etc.)

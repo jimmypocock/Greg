@@ -13,7 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from api.api.dependencies import get_config
+from api.core.dependencies import get_config
 from api.config.settings import Config
 from api.llm import (
     DefaultModelInfo,

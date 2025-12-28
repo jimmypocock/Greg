@@ -6,7 +6,7 @@ Core admin routes for user, invite, and cost management under /admin prefix.
 
 from fastapi import APIRouter
 
-from api.api.routes.admin import costs, invites, users
+from api.core.routes.admin import costs, invites, users
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 

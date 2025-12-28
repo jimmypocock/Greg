@@ -217,6 +217,11 @@ function SongPageContent({ params }: PageProps) {
     setShowChords(prev => !prev);
   }, []);
 
+  // Refresh song data when AI shaper updates it
+  const handleSongUpdated = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: songKeys.detail(resolvedParams.id) });
+  }, [queryClient, resolvedParams.id]);
+
   // Merge line with the previous line (backspace at start of line with content)
   const handleMergeWithPrevious = useCallback(async (
     sectionId: string,
@@ -644,13 +649,13 @@ function SongPageContent({ params }: PageProps) {
         </div>
       )}
 
-      {/* Main Three Pane Layout */}
+      {/* Main Three Pane Layout - AI on left, Editor in center, Data on right */}
       <ThreePaneLayout
         leftPanel={
-          <ToolboxPanel
+          <AIChatPanel
             song={song}
-            onUpdateSong={handleUpdateSong}
-            isUpdating={updateSong.isPending}
+            onClose={() => setAiPanelOpen(false)}
+            onSongUpdated={handleSongUpdated}
           />
         }
         centerPanel={
@@ -682,13 +687,14 @@ function SongPageContent({ params }: PageProps) {
           />
         }
         rightPanel={
-          <AIChatPanel
+          <ToolboxPanel
             song={song}
-            onClose={() => setAiPanelOpen(false)}
+            onUpdateSong={handleUpdateSong}
+            isUpdating={updateSong.isPending}
           />
         }
-        rightPanelOpen={aiPanelOpen}
-        onRightPanelToggle={setAiPanelOpen}
+        leftPanelOpen={aiPanelOpen}
+        onLeftPanelToggle={setAiPanelOpen}
       />
 
       {/* Delete Confirmation Modal */}

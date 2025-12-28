@@ -46,7 +46,7 @@ def upgrade() -> None:
         # Role (enum created in migration 002)
         sa.Column(
             "role",
-            postgresql.ENUM("owner", "editor", "viewer", name="collaboratorrole", create_type=False),
+            postgresql.ENUM("OWNER", "EDITOR", "VIEWER", name="collaboratorrole", create_type=False),
             nullable=False,
         ),
 

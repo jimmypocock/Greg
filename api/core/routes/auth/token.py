@@ -18,7 +18,7 @@ import jwt
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.api.rate_limit import limiter
+from api.core.rate_limit import limiter
 from api.auth.refresh_tokens import revoke_all_user_tokens, revoke_refresh_token
 from api.auth.schemas import (
     AccessTokenResponse,

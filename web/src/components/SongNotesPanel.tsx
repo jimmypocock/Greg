@@ -17,6 +17,12 @@ const NOTE_TYPE_LABELS: Record<NoteType, { label: string; color: string; bgColor
   [NoteType.TODO]: { label: 'Todo', color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200' },
   [NoteType.FEEDBACK]: { label: 'Feedback', color: 'text-green-700', bgColor: 'bg-green-50 border-green-200' },
   [NoteType.OTHER]: { label: 'Other', color: 'text-slate-700', bgColor: 'bg-slate-50 border-slate-200' },
+  // Shape-related note types (created by AI, shown in Song Shape panel)
+  [NoteType.SONG_SHAPE]: { label: 'Song Shape', color: 'text-violet-700', bgColor: 'bg-violet-50 border-violet-200' },
+  [NoteType.THEME]: { label: 'Theme', color: 'text-indigo-700', bgColor: 'bg-indigo-50 border-indigo-200' },
+  [NoteType.KEY_IMAGE]: { label: 'Key Image', color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200' },
+  [NoteType.EMOTIONAL_ARC]: { label: 'Emotional Arc', color: 'text-rose-700', bgColor: 'bg-rose-50 border-rose-200' },
+  [NoteType.FRAGMENT]: { label: 'Fragment', color: 'text-teal-700', bgColor: 'bg-teal-50 border-teal-200' },
 };
 
 export function SongNotesPanel({ songId }: SongNotesPanelProps) {

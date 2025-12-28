@@ -17,11 +17,12 @@ depends_on = None
 
 def upgrade() -> None:
     # Drop enum if exists (from previous failed migration) then recreate
+    # Use uppercase values to match Python enum names (SQLAlchemy default behavior)
     op.execute("DROP TYPE IF EXISTS userplan CASCADE")
-    op.execute("CREATE TYPE userplan AS ENUM ('free', 'pro', 'enterprise')")
+    op.execute("CREATE TYPE userplan AS ENUM ('FREE', 'PRO', 'ENTERPRISE')")
 
     # Add columns using raw SQL
-    op.execute("ALTER TABLE users ADD COLUMN plan userplan NOT NULL DEFAULT 'free'")
+    op.execute("ALTER TABLE users ADD COLUMN plan userplan NOT NULL DEFAULT 'FREE'")
     op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)")
     op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(255)")
     op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_started_at TIMESTAMPTZ")

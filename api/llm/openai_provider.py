@@ -14,34 +14,47 @@ from .base import BaseLLMProvider, LLMResponse
 
 
 # Pricing per 1M tokens (as of Dec 2025)
+# Cached input pricing is 90% off for GPT-5.x models
 OPENAI_PRICING = {
-    # GPT-4o family
-    "gpt-4o": {"input": 2.50, "output": 10.00},
-    "gpt-4o-2024-11-20": {"input": 2.50, "output": 10.00},
-    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "gpt-4o-mini-2024-07-18": {"input": 0.15, "output": 0.60},
-    # GPT-4 Turbo
-    "gpt-4-turbo": {"input": 10.00, "output": 30.00},
-    "gpt-4-turbo-preview": {"input": 10.00, "output": 30.00},
-    # GPT-4
-    "gpt-4": {"input": 30.00, "output": 60.00},
-    # GPT-3.5
-    "gpt-3.5-turbo": {"input": 0.50, "output": 1.50},
-    "gpt-3.5-turbo-0125": {"input": 0.50, "output": 1.50},
-    # o1 reasoning models
-    "o1-preview": {"input": 15.00, "output": 60.00},
+    # GPT-5.2 (latest flagship - Dec 2025)
+    "gpt-5.2": {"input": 1.75, "output": 14.00, "cached_input": 0.175},
+    # GPT-5.1
+    "gpt-5.1": {"input": 1.25, "output": 10.00, "cached_input": 0.125},
+    # GPT-5 family
+    "gpt-5": {"input": 1.25, "output": 10.00, "cached_input": 0.125},
+    "gpt-5-mini": {"input": 0.25, "output": 2.00, "cached_input": 0.025},
+    "gpt-5-nano": {"input": 0.05, "output": 0.40, "cached_input": 0.005},
+    # GPT-4.1 family
+    "gpt-4.1": {"input": 2.00, "output": 8.00, "cached_input": 0.50},
+    "gpt-4.1-mini": {"input": 0.40, "output": 1.60, "cached_input": 0.10},
+    "gpt-4.1-nano": {"input": 0.10, "output": 0.40, "cached_input": 0.025},
+    # GPT-4o family (legacy)
+    "gpt-4o": {"input": 2.50, "output": 10.00, "cached_input": 1.25},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cached_input": 0.075},
+    # o-series reasoning models
+    "o3-mini": {"input": 1.10, "output": 4.40},
+    "o1": {"input": 15.00, "output": 60.00},
     "o1-mini": {"input": 3.00, "output": 12.00},
 }
 
-# Model aliases
+# Model aliases for convenience
 MODEL_ALIASES = {
+    # GPT-5.x aliases
+    "gpt5.2": "gpt-5.2",
+    "gpt5.1": "gpt-5.1",
+    "gpt5": "gpt-5",
+    "gpt5-mini": "gpt-5-mini",
+    "gpt5-nano": "gpt-5-nano",
+    # GPT-4.1 aliases
+    "gpt4.1": "gpt-4.1",
+    "gpt4.1-mini": "gpt-4.1-mini",
+    "gpt4.1-nano": "gpt-4.1-nano",
+    # Legacy aliases
     "gpt4": "gpt-4o",
     "gpt-4": "gpt-4o",
     "gpt4o": "gpt-4o",
     "gpt4-mini": "gpt-4o-mini",
     "gpt-4-mini": "gpt-4o-mini",
-    "gpt35": "gpt-3.5-turbo",
-    "gpt-3.5": "gpt-3.5-turbo",
 }
 
 
@@ -49,7 +62,7 @@ class OpenAIProvider(BaseLLMProvider):
     """OpenAI GPT provider."""
 
     PROVIDER_NAME = "openai"
-    DEFAULT_MODEL = "gpt-4o-mini"  # Good balance of cost/quality
+    DEFAULT_MODEL = "gpt-5-mini"  # Good balance of cost/quality (Dec 2025)
 
     def __init__(
         self,

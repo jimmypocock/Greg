@@ -26,7 +26,7 @@ export default function PricingPage() {
     if (planId === 'free') return;
 
     createCheckout.mutate({
-      plan: planId as 'pro' | 'enterprise',
+      plan: planId as 'pro',
       success_url: `${window.location.origin}/settings?success=true`,
       cancel_url: `${window.location.origin}/pricing`,
     });
@@ -102,7 +102,7 @@ export default function PricingPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
           </div>
         ) : (
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
             {plans.map((plan) => {
               const isCurrentPlan = user?.plan === plan.id;
               const isPro = plan.id === 'pro';

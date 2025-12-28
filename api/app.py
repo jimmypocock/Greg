@@ -5,19 +5,25 @@ A standalone app for structuring, organizing, and completing songs.
 Includes reference library with RAG capabilities for research and inspiration.
 """
 
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 from api.routes import agents, audio, billing, collaboration, library, notes, songs, versions, webhooks, yjs_websocket
+from api.core.routes import admin, auth
+from api.auth.handlers import register_auth_exception_handlers
 from api.services.library import (
     register_ask_exception_handlers,
     register_document_exception_handlers,
     register_search_exception_handlers,
     register_storage_exception_handlers,
 )
-from api.api.routes.websocket import router as websocket_router
+from api.core.routes.websocket import router as websocket_router
 from api.config import Config
 from api.database import close_database, init_database
 
@@ -57,13 +63,29 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
     )
 
-    # Register exception handlers for library services
+    # Register exception handlers
+    register_auth_exception_handlers(app)
     register_ask_exception_handlers(app)
     register_document_exception_handlers(app)
     register_search_exception_handlers(app)
     register_storage_exception_handlers(app)
 
+    # Global exception handler for unhandled errors
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        """Catch-all handler for unhandled exceptions.
+
+        Returns a proper JSON response instead of HTML error page.
+        """
+        logger.exception(f"Unhandled exception: {exc}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "An unexpected error occurred. Please try again."},
+        )
+
     # Register routes
+    app.include_router(admin.router)
+    app.include_router(auth.router)
     app.include_router(songs.router)
     app.include_router(notes.router)
     app.include_router(agents.router)

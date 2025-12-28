@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Column, Enum, UniqueConstraint, text
+from sqlalchemy import Column, DateTime, Enum, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlmodel import Field, Relationship, SQLModel
 
 from api.enums import CollaboratorRole
@@ -24,7 +25,10 @@ class SongCollaborator(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     song_id: uuid.UUID = Field(foreign_key="songs.id", index=True)
-    user_id: uuid.UUID = Field(foreign_key="users.id", index=True)
+    # Foreign key constraint defined in database migration
+    user_id: uuid.UUID = Field(
+        sa_column=Column(PGUUID(as_uuid=True), nullable=False, index=True),
+    )
 
     role: CollaboratorRole = Field(
         default=CollaboratorRole.VIEWER,
@@ -35,23 +39,30 @@ class SongCollaborator(SQLModel, table=True):
     )
 
     # Who invited this collaborator (null for owner)
-    invited_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
+    # Foreign key constraint defined in database migration
+    invited_by: Optional[uuid.UUID] = Field(
+        default=None,
+        sa_column=Column(PGUUID(as_uuid=True), nullable=True),
+    )
     invited_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
 
     # When the user accepted the invitation (null if pending)
-    accepted_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
 
-    # Timestamps
+    # Timestamps - must use timezone-aware columns to match utc_now()
     created_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
     updated_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
 
     # Relationships

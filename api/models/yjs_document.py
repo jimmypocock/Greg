@@ -4,8 +4,10 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import LargeBinary, UniqueConstraint, text
-from sqlmodel import Column, Field, SQLModel
+from sqlalchemy import DateTime, LargeBinary, UniqueConstraint, text
+from sqlalchemy import Column as SAColumn
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlmodel import Field, SQLModel
 
 from api.models.utils import utc_now
 
@@ -27,24 +29,28 @@ class YjsDocument(SQLModel, table=True):
     # Yjs state vector for efficient sync
     state_vector: Optional[bytes] = Field(
         default=None,
-        sa_column=Column(LargeBinary, nullable=True),
+        sa_column=SAColumn(LargeBinary, nullable=True),
     )
 
     # Full Yjs document state (binary encoded)
     document_state: Optional[bytes] = Field(
         default=None,
-        sa_column=Column(LargeBinary, nullable=True),
+        sa_column=SAColumn(LargeBinary, nullable=True),
     )
 
     # Track who made the last update
-    last_updated_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
+    # Foreign key constraint defined in database migration
+    last_updated_by: Optional[uuid.UUID] = Field(
+        default=None,
+        sa_column=SAColumn(PGUUID(as_uuid=True), nullable=True),
+    )
 
-    # Timestamps
+    # Timestamps - must use timezone-aware columns to match utc_now()
     created_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=SAColumn(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
     updated_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=SAColumn(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )

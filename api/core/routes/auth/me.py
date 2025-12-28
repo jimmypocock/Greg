@@ -17,7 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.api.rate_limit import limiter
+from api.core.rate_limit import limiter
 from api.auth import CurrentUser
 from api.auth.refresh_tokens import revoke_all_user_tokens
 from api.auth.schemas import DeactivateAccountRequest, MessageResponse, PasswordChangeRequest, UserRead

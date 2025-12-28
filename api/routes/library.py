@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.api.dependencies import get_config
+from api.core.dependencies import get_config
 from api.auth import Auth, CurrentUser
 from api.config.settings import Config
 from api.database import get_session_dependency

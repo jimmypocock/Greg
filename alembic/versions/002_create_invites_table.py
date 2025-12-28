@@ -28,16 +28,16 @@ TABLE_NAME = "invites"
 def upgrade() -> None:
     """Create invites table for referrals, collaboration, and promos."""
 
-    # Create enums using raw SQL
-    op.execute("DO $$ BEGIN CREATE TYPE invitetype AS ENUM ('referral', 'collaboration', 'promo'); EXCEPTION WHEN duplicate_object THEN NULL; END $$")
-    op.execute("DO $$ BEGIN CREATE TYPE collaboratorrole AS ENUM ('owner', 'editor', 'viewer'); EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    # Create enums using raw SQL (uppercase to match Python enum names)
+    op.execute("DO $$ BEGIN CREATE TYPE invitetype AS ENUM ('REFERRAL', 'COLLABORATION', 'PROMO'); EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute("DO $$ BEGIN CREATE TYPE collaboratorrole AS ENUM ('OWNER', 'EDITOR', 'VIEWER'); EXCEPTION WHEN duplicate_object THEN NULL; END $$")
 
     # Create table using raw SQL to avoid SQLAlchemy Enum auto-creation issues
     op.execute("""
         CREATE TABLE invites (
             id UUID PRIMARY KEY,
             code VARCHAR(32) NOT NULL,
-            type invitetype NOT NULL DEFAULT 'referral',
+            type invitetype NOT NULL DEFAULT 'REFERRAL',
             created_by UUID REFERENCES users(id) ON DELETE SET NULL,
             song_id UUID,
             collaboration_role collaboratorrole,

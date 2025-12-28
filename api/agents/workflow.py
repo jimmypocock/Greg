@@ -36,7 +36,9 @@ from api.agents.critic import (
 from api.agents.orchestrator import (
     orchestrator_agent,
     OrchestratorDependencies,
-    build_chat_prompt,
+    build_orchestrator_prompt,
+    build_system_prompt,
+    SessionFactory,
 )
 
 logger = logging.getLogger(__name__)
@@ -213,7 +215,7 @@ async def run_critic_workflow(
             output_tokens=output_tokens,
             total_cost_usd=total_cost,
             duration_ms=duration_ms,
-            model=model or "openai:gpt-4o-mini",
+            model=model or "openai:gpt-5.2",
         )
 
     except Exception as e:
@@ -227,7 +229,7 @@ async def run_critic_workflow(
             success=False,
             error_message=str(e),
             duration_ms=duration_ms,
-            model=model or "openai:gpt-4o-mini",
+            model=model or "openai:gpt-5.2",
         )
 
 
@@ -283,20 +285,39 @@ def _estimate_cost(input_tokens: int, output_tokens: int, model: str | None) -> 
     return input_cost + output_cost
 
 
+# Tools that modify song data - emit song.updated event for these
+SONG_MODIFICATION_TOOLS = frozenset([
+    'set_theme', 'add_key_image', 'set_emotional_arc',
+    'create_sections', 'add_fragment', 'add_reference',
+    'update_song_title', 'write_lyrics', 'update_lyrics',
+    # New structure control tools
+    'delete_section', 'delete_sections', 'move_section',
+    'reorder_sections', 'replace_structure',
+    'write_to_slot', 'replace_slot_lyrics',
+])
+
+
 async def run_orchestrator_workflow(
     song: Song,
     user_message: str,
     conversation_history: list[dict],
+    session_factory: SessionFactory,
     model: str | None = None,
     on_event: Callable[[AgentEvent], None] | None = None,
 ) -> AgentResult:
     """
-    Run the orchestrator agent for conversational songwriting assistance.
+    Run the unified orchestrator agent for all songwriting tasks.
+
+    The orchestrator adapts its behavior based on context:
+    - Exploration: Asks questions, builds understanding
+    - Writing: Creates sections, drafts lyrics
+    - Refinement: Gives feedback, improves content
 
     Args:
         song: The song context
         user_message: The current user message
         conversation_history: Previous conversation turns [{role, content}]
+        session_factory: Factory for creating database sessions (for concurrent tool calls)
         model: Optional model override
         on_event: Callback for streaming events
 
@@ -313,20 +334,26 @@ async def run_orchestrator_workflow(
 
     try:
         emit("agent.started", {
-            "agent_name": "Songwriting Assistant",
+            "agent_name": "Songwriting Collaborator",
             "task_type": "chat",
             "song_title": song.title,
         })
 
-        # Build the prompt with conversation history
-        prompt = build_chat_prompt(user_message, conversation_history)
+        # Build context-aware system prompt
+        system_prompt = build_system_prompt(song, conversation_history)
+
+        # Build the user prompt with conversation history
+        prompt = build_orchestrator_prompt(user_message, conversation_history, song)
 
         emit("agent.thinking", {"thought": "Thinking about your song..."})
 
-        # Create dependencies
+        # Create dependencies with session factory for tools that modify song data
+        # The system prompt is passed via dependencies for dynamic context
         deps = OrchestratorDependencies(
             song=song,
+            session_factory=session_factory,
             conversation_history=conversation_history,
+            system_prompt=system_prompt,  # Context-aware prompt via dependencies
         )
 
         # Run the agent with streaming
@@ -334,6 +361,8 @@ async def run_orchestrator_workflow(
         input_tokens = 0
         output_tokens = 0
         final_result = None
+
+        tools_called = []
 
         async for event in orchestrator_agent.run_stream_events(
             prompt,
@@ -344,6 +373,8 @@ async def run_orchestrator_workflow(
 
             if event_kind == 'function_tool_call':
                 tool_name = event.part.tool_name if hasattr(event, 'part') else 'unknown'
+                tools_called.append(tool_name)
+                logger.info(f"Tool called: {tool_name}")
                 emit("agent.tool.start", {"tool_name": tool_name})
                 emit("agent.thinking", {"thought": f"Using {tool_name}..."})
 
@@ -351,6 +382,10 @@ async def run_orchestrator_workflow(
                 tool_name = getattr(event.result, 'tool_name', 'unknown') if hasattr(event, 'result') else 'unknown'
                 content_preview = str(event.content)[:100] if hasattr(event, 'content') and event.content else "completed"
                 emit("agent.tool.end", {"tool_name": tool_name, "tool_output": content_preview})
+
+                # Emit song update event when song modification tools are used
+                if tool_name in SONG_MODIFICATION_TOOLS:
+                    emit("song.updated", {"tool_name": tool_name})
 
             elif event_kind == 'part_delta':
                 if hasattr(event, 'delta'):
@@ -385,6 +420,12 @@ async def run_orchestrator_workflow(
         duration_ms = int((time.time() - start_time) * 1000)
         total_cost = _estimate_cost(input_tokens, output_tokens, model)
 
+        # Log summary of tools used
+        if tools_called:
+            logger.info(f"Orchestrator used {len(tools_called)} tools: {', '.join(tools_called)}")
+        else:
+            logger.warning(f"Orchestrator returned without calling any tools. Message: {user_message[:100]}")
+
         emit("agent.completed", {
             "result": result_text[:500] + "..." if len(result_text) > 500 else result_text,
             "duration_ms": duration_ms,
@@ -397,7 +438,7 @@ async def run_orchestrator_workflow(
             output_tokens=output_tokens,
             total_cost_usd=total_cost,
             duration_ms=duration_ms,
-            model=model or "openai:gpt-4o-mini",
+            model=model or "openai:gpt-5.2",
         )
 
     except Exception as e:
@@ -411,5 +452,9 @@ async def run_orchestrator_workflow(
             success=False,
             error_message=str(e),
             duration_ms=duration_ms,
-            model=model or "openai:gpt-4o-mini",
+            model=model or "openai:gpt-5.2",
         )
+
+
+# Alias for backward compatibility - both now use the same unified orchestrator
+run_shaper_workflow = run_orchestrator_workflow

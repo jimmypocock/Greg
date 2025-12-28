@@ -15,6 +15,11 @@ from api.agents.critic import (
     CriticDependencies,
     SongReview,
 )
+from api.agents.song_shaper import (
+    song_shaper_agent,
+    SongShaperDependencies,
+    build_shaper_prompt,
+)
 
 __all__ = [
     # Workflow
@@ -26,4 +31,8 @@ __all__ = [
     "critic_agent",
     "CriticDependencies",
     "SongReview",
+    # Song shaper agent
+    "song_shaper_agent",
+    "SongShaperDependencies",
+    "build_shaper_prompt",
 ]

@@ -28,10 +28,11 @@ interface UseAgentWebSocketOptions {
   onEvent?: (event: AgentEvent) => void;
   onComplete?: (result: AgentTaskResult) => void;
   onError?: (error: string) => void;
+  onCustomEvent?: (eventType: string, data: AgentEventData) => void;
 }
 
 export function useAgentWebSocket(options: UseAgentWebSocketOptions = {}) {
-  const { onEvent, onComplete, onError } = options;
+  const { onEvent, onComplete, onError, onCustomEvent } = options;
   const wsRef = useRef<WebSocket | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [progress, setProgress] = useState<AgentProgress>({
@@ -169,6 +170,13 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions = {}) {
               onError?.(data.error || 'Unknown error');
               ws.close();
               break;
+
+            default:
+              // Handle custom events (e.g., shape.updated)
+              if (agentEvent.event && onCustomEvent) {
+                onCustomEvent(agentEvent.event, data);
+              }
+              break;
           }
         } catch (err) {
           console.error('Failed to parse WebSocket message:', err);
@@ -189,7 +197,7 @@ export function useAgentWebSocket(options: UseAgentWebSocketOptions = {}) {
         wsRef.current = null;
       };
     },
-    [disconnect, onEvent, onComplete, onError]
+    [disconnect, onEvent, onComplete, onError, onCustomEvent]
   );
 
   // Cleanup on unmount

@@ -24,3 +24,6 @@ class AgentTaskType(str, Enum):
 
     # Melody tasks (future)
     SUGGEST_CHORDS = "suggest_chords"
+
+    # Song shaper tasks (new song exploration)
+    SHAPE_EXPLORATION = "shape_exploration"  # Build song shape through conversation

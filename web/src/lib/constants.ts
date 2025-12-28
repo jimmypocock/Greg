@@ -18,6 +18,7 @@ export const sectionLabels: Record<SectionType, string> = {
   [SectionType.INSTRUMENTAL]: 'Instrumental',
   [SectionType.SOLO]: 'Solo',
   [SectionType.BREAKDOWN]: 'Breakdown',
+  [SectionType.BRAIN_DUMP]: 'Brain Dump',
   [SectionType.OTHER]: 'Other',
 };
 

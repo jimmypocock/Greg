@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Column, Enum, text
+from sqlalchemy import Column, DateTime, Enum, text
 from sqlmodel import Field, SQLModel
 
 from api.enums import AgentTaskType, AgentType
@@ -50,8 +50,8 @@ class AgentReview(SQLModel, table=True):
     success: bool = Field(default=True)
     error_message: Optional[str] = None
 
-    # Timestamp
+    # Timestamp - must use timezone-aware column to match utc_now()
     created_at: datetime = Field(
         default_factory=utc_now,
-        sa_column_kwargs={"server_default": text("now()")},
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
