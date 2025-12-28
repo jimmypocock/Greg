@@ -514,19 +514,12 @@ function SongPageContent({ params }: PageProps) {
       {/* Header */}
       <header className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 no-print">
         <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </Link>
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-              Songwriter
-            </span>
-          </div>
+          <Link
+            href="/dashboard"
+            className="text-sm font-semibold text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+          >
+            Greg
+          </Link>
           <div className="flex items-center gap-2">
             {/* Undo/Redo buttons */}
             <div className="flex items-center border-r border-gray-200 dark:border-gray-700 pr-2 mr-2">
@@ -654,7 +647,6 @@ function SongPageContent({ params }: PageProps) {
         leftPanel={
           <AIChatPanel
             song={song}
-            onClose={() => setAiPanelOpen(false)}
             onSongUpdated={handleSongUpdated}
           />
         }

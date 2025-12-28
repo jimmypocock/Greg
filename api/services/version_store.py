@@ -1,6 +1,5 @@
 """Database-backed section version store."""
 
-from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -8,12 +7,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.models import ChordPlacement, Line, SectionVersion, SongSection
-
-
-def utc_now() -> datetime:
-    """Get current UTC time (Python 3.12+ compatible)."""
-    return datetime.now(timezone.utc)
+from api.database.models import ChordPlacement, Line, SectionVersion, SongSection
+from api.utils import utc_now
 
 
 class SectionVersionStore:

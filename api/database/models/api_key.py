@@ -55,6 +55,10 @@ class APIKey(Base, TimestampMixin):
         nullable=False,
     )
 
+    def __repr__(self) -> str:
+        status = "active" if self.is_active else "revoked"
+        return f"<APIKey '{self.name}' ({self.key_prefix}..., {status})>"
+
     # Relationships
     user: Mapped["User"] = relationship(
         "User",

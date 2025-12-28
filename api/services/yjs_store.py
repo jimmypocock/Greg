@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models import YjsDocument
+from api.database.models import YjsDocument
 
 logger = logging.getLogger(__name__)
 

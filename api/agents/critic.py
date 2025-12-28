@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
-from api.models import Song
+from api.database.models import Song
 from api.agents.tools import (
     detect_cliches,
     count_syllables,

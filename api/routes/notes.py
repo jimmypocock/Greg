@@ -25,7 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import PermissionService
 from api.enums import NoteType
-from api.models import SongNote, SongNoteCreateRequest, SongNoteUpdateRequest
+from api.database.models import SongNote
+from api.schemas import SongNoteCreateRequest, SongNoteUpdateRequest
 from api.services.db_store import SongDBStore
 from api.services.permissions import Permission
 from api.services.song_note_store import SongNoteStore

@@ -248,86 +248,11 @@ def cmd_models():
 
 def cmd_console():
     """Start an interactive Python console with database access."""
-    print("Starting Greg console...")
-    print("Loading models and database connection...\n")
-
-    startup_code = '''
-import asyncio
-from uuid import UUID
-
-# Database
-from api.database import init_database, get_session
-
-# Songwriter models
-from api.models import (
-    AgentReview,
-    ChordPlacement,
-    Line,
-    Section,
-    Song,
-    SongSection,
-)
-from api.enums import AgentTaskType, AgentType, SectionType, SongStatus
-from api.services.db_store import SongDBStore
-
-# SQLAlchemy
-from sqlalchemy import select, delete, update, func
-from sqlalchemy.orm import selectinload
-
-# Create event loop
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
-
-def run(coro):
-    """Run an async coroutine. Usage: run(store.list_all())"""
-    return loop.run_until_complete(coro)
-
-
-async def _init():
-    await init_database()
-    print("Database connected")
-
-
-run(_init())
-
-
-async def get_store():
-    """Get a fresh SongDBStore with a new session."""
-    async with get_session() as session:
-        return SongDBStore(session)
-
-
-print()
-print("Available:")
-print("  run(coro)             - Run async code")
-print("  get_store()           - Get a SongDBStore (use with run)")
-print("  Song, SongSection     - SQLModel models")
-print("  Line, ChordPlacement  - Pydantic models")
-print("  select, func          - SQLAlchemy query helpers")
-print()
-print("Examples:")
-print("  async def list_songs():")
-print("      async with get_session() as session:")
-print("          store = SongDBStore(session)")
-print("          return await store.list_all()")
-print()
-print("  songs = run(list_songs())")
-print("  [s.title for s in songs]")
-print()
-'''
-
-    import shutil
-    import tempfile
-
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-        f.write(startup_code)
-        startup_file = f.name
-
-    if shutil.which("ipython"):
-        run_cmd(["uv", "run", "ipython", "-i", startup_file])
-    else:
-        run_cmd(["uv", "run", "python", "-i", startup_file])
+    console_script = ROOT / "scripts" / "console.py"
+    if not console_script.exists():
+        print(f"Error: {console_script} not found")
+        sys.exit(1)
+    run_cmd(["uv", "run", "python", str(console_script)])
 
 
 def cmd_songwriter_ui():

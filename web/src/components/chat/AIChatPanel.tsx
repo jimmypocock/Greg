@@ -5,12 +5,10 @@ import { Song, SectionType } from '@/types';
 import { useChatSession } from '@/hooks/useChatSession';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
-import { QuickActionsBar } from './QuickActionsBar';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
 
 interface AIChatPanelProps {
   song: Song;
-  onClose?: () => void;
   onSongUpdated?: () => void; // Callback to refresh song data
 }
 
@@ -30,7 +28,7 @@ function isExplorationPhase(song: Song): boolean {
   return !hasRealContent;
 }
 
-export function AIChatPanel({ song, onClose, onSongUpdated }: AIChatPanelProps) {
+export function AIChatPanel({ song, onSongUpdated }: AIChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Handle song updates from the orchestrator
@@ -44,8 +42,6 @@ export function AIChatPanel({ song, onClose, onSongUpdated }: AIChatPanelProps) 
     progress,
     currentAssistantMessageId,
     sendMessage,
-    runQuickAction,
-    clearHistory,
   } = useChatSession({
     songId: song.id,
     onSongUpdated: handleSongUpdated,
@@ -123,39 +119,12 @@ export function AIChatPanel({ song, onClose, onSongUpdated }: AIChatPanelProps) 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div className="flex items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <div className="flex items-center gap-2">
           {headerIcon}
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{headerTitle}</h2>
         </div>
-        <div className="flex items-center gap-1">
-          {messages.length > 0 && (
-            <button
-              onClick={clearHistory}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              title="Clear chat history"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          )}
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              title="Close AI Assistant"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </div>
       </div>
-
-      {/* Quick Actions - always available, orchestrator handles context */}
-      <QuickActionsBar onAction={runQuickAction} disabled={isProcessing} />
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-1">

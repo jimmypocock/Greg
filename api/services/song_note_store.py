@@ -1,19 +1,14 @@
 """Database-backed song note store using SQLModel."""
 
-from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.database.models import SongNote
 from api.enums import NoteType
-from api.models import SongNote
-
-
-def utc_now() -> datetime:
-    """Get current UTC time (Python 3.12+ compatible)."""
-    return datetime.now(timezone.utc)
+from api.utils import utc_now
 
 
 class SongNoteStore:

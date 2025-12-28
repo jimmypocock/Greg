@@ -100,6 +100,10 @@ class DocumentChunk(Base):
         nullable=False,
     )
 
+    def __repr__(self) -> str:
+        preview = self.content[:25] + "..." if len(self.content) > 25 else self.content
+        return f"<DocumentChunk #{self.chunk_index} '{preview}'>"
+
     # Relationships
     document: Mapped["Document"] = relationship(
         "Document",

@@ -9,6 +9,8 @@ import logging
 from typing import Any, Callable
 from uuid import UUID
 
+from api.observability import traceable
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.agents.workflow import (
@@ -19,7 +21,7 @@ from api.agents.workflow import (
     AgentResult,
 )
 from api.enums import AgentTaskType, AgentType
-from api.models import Song
+from api.database.models import Song
 from api.services.agent_review_store import AgentReviewStore
 from api.services.chat_history_store import ChatHistoryStore
 from api.jobs import job_manager
@@ -93,6 +95,7 @@ async def run_agent_task(
     return task_id
 
 
+@traceable(name="agent-task", run_type="chain")
 async def _run_agent_task_async(
     task_id: str,
     song: Song,
@@ -228,6 +231,7 @@ async def run_chat_task(
     return task_id
 
 
+@traceable(name="chat-task", run_type="chain")
 async def _run_chat_task_async(
     task_id: str,
     song: Song,

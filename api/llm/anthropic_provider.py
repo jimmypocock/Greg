@@ -10,6 +10,7 @@ from typing import Generator, Optional
 
 import anthropic
 
+from api.observability import wrap_anthropic_client
 from .base import BaseLLMProvider, LLMResponse
 
 
@@ -58,7 +59,8 @@ class AnthropicProvider(BaseLLMProvider):
         self.client = None
 
         if self.api_key:
-            self.client = anthropic.Anthropic(api_key=self.api_key)
+            # Wrap with LangSmith for automatic tracing
+            self.client = wrap_anthropic_client(anthropic.Anthropic(api_key=self.api_key))
 
     def is_available(self) -> bool:
         """Check if Anthropic API is available."""

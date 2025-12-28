@@ -21,7 +21,7 @@ from pydantic_ai import Agent, RunContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.enums import NoteType, SectionType
-from api.models import Song, SongNote, SongSection
+from api.database.models import Song, SongNote, SongSection
 from api.services.db_store import SongDBStore
 from api.services.song_note_store import SongNoteStore
 

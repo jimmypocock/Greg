@@ -28,15 +28,17 @@ from api.auth import CurrentUser
 from api.database import get_session_dependency
 
 from api.enums import AgentTaskType, AgentType, CollaboratorRole, SectionType, SongStatus
-from api.models import (
-    AddChordRequest,
+from api.database.models import (
     ChordPlacement,
     Line,
     SectionVersion,
     Song,
     SongCollaborator,
-    SongCreateRequest,
     SongSection,
+)
+from api.schemas import (
+    AddChordRequest,
+    SongCreateRequest,
     SongUpdateRequest,
     StructureSuggestion,
 )
@@ -306,7 +308,7 @@ async def create_song(
     song = await store.create(song)
 
     # Create owner collaborator record
-    from api.models.utils import utc_now
+    from api.utils import utc_now
     collaborator = SongCollaborator(
         song_id=song.id,
         user_id=user.id,
@@ -390,7 +392,7 @@ async def quick_start_song(
     song = await store.create(song)
 
     # Create owner collaborator record
-    from api.models.utils import utc_now
+    from api.utils import utc_now
     collaborator = SongCollaborator(
         song_id=song.id,
         user_id=user.id,
@@ -446,7 +448,7 @@ async def create_song_from_markdown(
     song = await store.create(song)
 
     # Create owner collaborator record
-    from api.models.utils import utc_now
+    from api.utils import utc_now
     collaborator = SongCollaborator(
         song_id=song.id,
         user_id=user.id,

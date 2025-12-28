@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from api.models import Song
+    from api.database.models import Song
 
 
 # Cliche patterns with suggestions

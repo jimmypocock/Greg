@@ -139,6 +139,9 @@ class User(SQLAlchemyBaseUserTableUUID, TimestampMixin, Base):
         foreign_keys=[referred_by_invite_id],
     )
 
+    def __repr__(self) -> str:
+        return f"<User {self.email} ({self.role.value})>"
+
     @property
     def is_admin(self) -> bool:
         """Check if user has admin role."""

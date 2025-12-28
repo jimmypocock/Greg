@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import PermissionService
 from api.enums import CollaboratorRole
-from api.models import SongCollaborator, SongShareLink
+from api.database.models import SongCollaborator, SongShareLink
 from api.services.collaborator_store import CollaboratorStore, ShareLinkStore
 from api.services.db_store import SongDBStore
 from api.services.permissions import Permission

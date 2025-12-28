@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.chat_message import ChatMessage
+from api.database.models import ChatMessage
 
 
 logger = logging.getLogger(__name__)

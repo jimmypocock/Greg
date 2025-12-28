@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.enums import CollaboratorRole
-from api.models import SongCollaborator, SongShareLink
-from api.models.utils import utc_now
+from api.database.models import SongCollaborator, SongShareLink
+from api.utils import utc_now
 
 logger = logging.getLogger(__name__)
 

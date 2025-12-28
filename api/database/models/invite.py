@@ -117,6 +117,10 @@ class Invite(Base, TimestampMixin):
         index=True,
     )
 
+    def __repr__(self) -> str:
+        status = "active" if self.is_active else "inactive"
+        return f"<Invite '{self.code}' ({self.type.value}, {status})>"
+
     # Relationships
     created_by_user: Mapped[Optional["User"]] = relationship(
         "User",

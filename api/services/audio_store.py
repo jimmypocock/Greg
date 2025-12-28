@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.enums import AnalysisStatus
-from api.models import AudioFile
+from api.database.models import AudioFile
 
 logger = logging.getLogger(__name__)
 

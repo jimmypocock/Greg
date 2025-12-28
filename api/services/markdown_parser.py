@@ -11,7 +11,7 @@ import re
 from typing import Optional
 
 from api.enums import SectionType, SongStatus
-from api.models import Line, Song, SongSection
+from api.database.models import Line, Song, SongSection
 
 
 def parse_section_header(header: str) -> tuple[SectionType, Optional[int]]:

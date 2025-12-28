@@ -10,7 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.enums import CollaboratorRole
-from api.models import Song, SongCollaborator, SongShareLink
+from api.database.models import Song, SongCollaborator, SongShareLink
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +218,7 @@ class SongPermissionService:
             return None
 
         # Create collaborator record
-        from api.models.utils import utc_now
+        from api.utils import utc_now
 
         collaborator = SongCollaborator(
             song_id=link.song_id,

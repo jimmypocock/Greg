@@ -116,5 +116,9 @@ class AIRequest(Base, TimestampMixin):
         nullable=True,
     )
 
+    def __repr__(self) -> str:
+        status = "✓" if self.success else "✗"
+        return f"<AIRequest {self.provider.value}/{self.model} ${self.total_cost_usd:.4f} {status}>"
+
     # Relationships
     user: Mapped["User"] = relationship("User")

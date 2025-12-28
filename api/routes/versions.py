@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import PermissionService
-from api.models import Line, SectionVersion
+from api.database.models import Line, SectionVersion
 from api.services.db_store import SongDBStore
 from api.services.permissions import Permission
 from api.services.version_store import SectionVersionStore

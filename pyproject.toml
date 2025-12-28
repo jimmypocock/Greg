@@ -50,6 +50,7 @@ dependencies = [
     # Database
     "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.30.0",
+    "psycopg2-binary>=2.9.0",  # Sync driver for console
     "alembic>=1.14.0",
     # Authentication
     "fastapi-users[sqlalchemy]>=14.0.0",
@@ -61,7 +62,6 @@ dependencies = [
     "arq>=0.26.0",
     "redis>=5.0.0",
     "pgvector>=0.4.2",
-    "sqlmodel>=0.0.27",
     # Agent Framework (PydanticAI + LangGraph)
     "pydantic-ai>=0.0.40",
     "langgraph>=0.2.0",
@@ -72,6 +72,8 @@ dependencies = [
     "pycrdt>=0.10.0",
     # Payments
     "stripe>=11.0.0",
+    # Observability
+    "langsmith>=0.3.0",
 ]
 
 [project.scripts]

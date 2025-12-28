@@ -69,6 +69,10 @@ class RefreshToken(Base):
         nullable=False,
     )
 
+    def __repr__(self) -> str:
+        status = "valid" if self.is_valid else ("revoked" if self.is_revoked else "expired")
+        return f"<RefreshToken {self.token_hash[:8]}... ({status})>"
+
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="refresh_tokens")
 

@@ -9,11 +9,7 @@ import logging
 from typing import Optional
 
 from api.enums import SectionType
-from api.models import (
-    LineRequest,
-    Section,
-    StructureSuggestion,
-)
+from api.schemas import LineRequest, Section, StructureSuggestion
 from api.llm import BaseLLMProvider, get_provider
 
 logger = logging.getLogger(__name__)

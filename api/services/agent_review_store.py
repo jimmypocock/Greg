@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.enums import AgentTaskType, AgentType
-from api.models import AgentReview
+from api.database.models import AgentReview
 
 logger = logging.getLogger(__name__)
 

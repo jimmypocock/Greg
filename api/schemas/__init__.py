@@ -1,4 +1,4 @@
-"""Request schemas for Songwriter API."""
+"""Request/response schemas for the API."""
 
 from typing import Optional
 from uuid import UUID
@@ -7,8 +7,6 @@ from pydantic import BaseModel, Field
 
 from api.enums import NoteType, SectionType, SongStatus
 
-
-# Simple Pydantic models for API requests (not database models)
 
 class ChordPlacementRequest(BaseModel):
     """A chord placement in an API request."""
@@ -26,7 +24,7 @@ class LineRequest(BaseModel):
 
 
 class Section(BaseModel):
-    """A section in a structure suggestion (Pydantic, not database model)."""
+    """A section in a structure suggestion."""
 
     type: SectionType
     number: Optional[int] = None
@@ -83,8 +81,6 @@ class StructureSuggestion(BaseModel):
     reasoning: Optional[str] = Field(None, description="Explanation of the structure")
 
 
-# Song notes requests
-
 class SongNoteCreateRequest(BaseModel):
     """Request to create a new song note."""
 
@@ -101,3 +97,17 @@ class SongNoteUpdateRequest(BaseModel):
     content: Optional[str] = None
     title: Optional[str] = None
     is_resolved: Optional[bool] = None
+
+
+__all__ = [
+    "AddChordRequest",
+    "ChordPlacementRequest",
+    "LineRequest",
+    "Section",
+    "SectionUpdateRequest",
+    "SongCreateRequest",
+    "SongNoteCreateRequest",
+    "SongNoteUpdateRequest",
+    "SongUpdateRequest",
+    "StructureSuggestion",
+]

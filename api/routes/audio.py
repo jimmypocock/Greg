@@ -30,7 +30,7 @@ from api.constants import (
 )
 from api.dependencies import PermissionService
 from api.enums import AnalysisStatus
-from api.models import AudioFile
+from api.database.models import AudioFile
 from api.services.audio_runner import run_audio_analysis_task
 from api.services.audio_store import AudioFileStore
 from api.services.db_store import SongDBStore

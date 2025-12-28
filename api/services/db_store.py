@@ -1,7 +1,6 @@
 """Database-backed song store using SQLModel."""
 
 import logging
-from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -9,14 +8,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.models import ChordPlacement, Line, SectionVersion, Song, SongSection
+from api.database.models import ChordPlacement, Line, SectionVersion, Song, SongSection
+from api.utils import utc_now
 
 logger = logging.getLogger(__name__)
-
-
-def utc_now() -> datetime:
-    """Get current UTC time (Python 3.12+ compatible)."""
-    return datetime.now(timezone.utc)
 
 
 class SongDBStore:

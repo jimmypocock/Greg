@@ -1,366 +1,212 @@
 #!/usr/bin/env python3
 """
-Greg CLI Runner
+Greg CLI
 
 Commands:
-    dev         Start infrastructure, run migrations, and start API server
-    server      Start the Writer API server (port 8080)
-    songwriter  Start the Songwriter API server (port 8081)
-    worker      Start the ARQ background worker
-    infra       Start PostgreSQL and Redis (docker-compose)
-    infra-stop  Stop infrastructure containers
-    migrate     Run database migrations
-    test        Run tests
-    models      List available LLM models
-    clean       Clean temporary files
-    help        Show this help message
-
-Examples:
-    greg dev              # Full development environment
-    greg server           # Writer app (port 8080)
-    greg songwriter       # Songwriter app (port 8081)
-    greg worker           # Just the background worker
-    greg test             # Run test suite
-    greg test -k "test_auth"  # Run specific tests
+    dev       Start infrastructure, run migrations, and start server
+    server    Start the API server (port 8080)
+    worker    Start the ARQ background worker
+    console   Interactive database console
+    infra     Start PostgreSQL and Redis
+    migrate   Run database migrations
+    test      Run tests
+    models    List available LLM models
+    clean     Clean temporary files
 """
 
 import os
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-# Project root
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).parent
-
-# Load environment variables from .env
-def load_env():
-    """Load .env file into environment."""
-    env_file = ROOT / ".env"
-    if env_file.exists():
-        with open(env_file) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, _, value = line.partition("=")
-                    # Remove quotes if present
-                    value = value.strip().strip("'\"")
-                    os.environ.setdefault(key.strip(), value)
+load_dotenv(ROOT / ".env")
 
 
-def run_cmd(cmd: list[str], env: dict | None = None, check: bool = False) -> int:
+def run(cmd: list[str], check: bool = False) -> int:
     """Run a command and return exit code."""
-    full_env = os.environ.copy()
-    if env:
-        full_env.update(env)
-    result = subprocess.call(cmd, cwd=ROOT, env=full_env)
+    result = subprocess.call(cmd, cwd=ROOT)
     if check and result != 0:
         sys.exit(result)
     return result
 
 
-def run_silent(cmd: list[str]) -> tuple[int, str, str]:
+def capture(cmd: list[str]) -> tuple[int, str]:
     """Run a command and capture output."""
     result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
-    return result.returncode, result.stdout, result.stderr
+    return result.returncode, result.stdout
 
 
-def check_docker():
-    """Check if Docker is available."""
-    code, _, _ = run_silent(["docker", "info"])
+def wait_for_service(host: str, port: int, name: str, timeout: int = 30) -> bool:
+    """Wait for a TCP service to be ready."""
+    print(f"  Waiting for {name} at {host}:{port}...", end="", flush=True)
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                print(" ready")
+                return True
+        except OSError:
+            time.sleep(0.5)
+            print(".", end="", flush=True)
+    print(" timeout!")
+    return False
+
+
+def docker_available() -> bool:
+    """Check if Docker is running."""
+    code, _ = capture(["docker", "info"])
     return code == 0
 
 
-def wait_for_postgres(timeout: int = 30) -> bool:
-    """Wait for PostgreSQL to be ready."""
-    import socket
-
-    host = os.environ.get("DB_HOST", "localhost")
-    port = int(os.environ.get("DB_PORT", "5433"))
-
-    print(f"  Waiting for PostgreSQL at {host}:{port}...", end="", flush=True)
-
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            result = sock.connect_ex((host, port))
-            sock.close()
-            if result == 0:
-                print(" ready")
-                return True
-        except socket.error:
-            pass
-        time.sleep(0.5)
-        print(".", end="", flush=True)
-
-    print(" timeout!")
-    return False
+# Commands
 
 
-def wait_for_redis(timeout: int = 30) -> bool:
-    """Wait for Redis to be ready."""
-    import socket
+def cmd_dev():
+    """Start full development environment."""
+    print("Starting Greg Development Environment\n")
 
-    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
-    # Parse host:port from URL
-    if redis_url.startswith("redis://"):
-        redis_url = redis_url[8:]
-    if "@" in redis_url:
-        redis_url = redis_url.split("@", 1)[1]
-    if "/" in redis_url:
-        redis_url = redis_url.split("/", 1)[0]
+    if docker_available():
+        print("[1/3] Starting infrastructure...")
+        run(["docker", "compose", "up", "-d"])
 
-    if ":" in redis_url:
-        host, port_str = redis_url.rsplit(":", 1)
-        port = int(port_str)
+        print("[2/3] Waiting for services...")
+        if not wait_for_service("localhost", 5433, "PostgreSQL"):
+            sys.exit(1)
+        if not wait_for_service("localhost", 6379, "Redis"):
+            sys.exit(1)
     else:
-        host = redis_url
-        port = 6379
+        print("[1/3] Docker not available - ensure services are running manually")
+        print("[2/3] Skipping service wait")
 
-    print(f"  Waiting for Redis at {host}:{port}...", end="", flush=True)
+    print("[3/3] Running migrations...")
+    run(["uv", "run", "alembic", "upgrade", "head"], check=True)
 
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            result = sock.connect_ex((host, port))
-            sock.close()
-            if result == 0:
-                print(" ready")
-                return True
-        except socket.error:
-            pass
-        time.sleep(0.5)
-        print(".", end="", flush=True)
-
-    print(" timeout!")
-    return False
-
-
-def cmd_infra():
-    """Start PostgreSQL and Redis with docker-compose."""
-    if not check_docker():
-        print("Error: Docker is not running. Please start Docker first.")
-        sys.exit(1)
-
-    print("Starting infrastructure...")
-    run_cmd(["docker", "compose", "up", "-d"], check=True)
-    print("Infrastructure started.")
-    print("  PostgreSQL: localhost:5432")
-    print("  Redis: localhost:6379")
-
-
-def cmd_infra_stop():
-    """Stop infrastructure containers."""
-    print("Stopping infrastructure...")
-    run_cmd(["docker", "compose", "down"])
-
-
-def cmd_migrate():
-    """Run database migrations."""
-    print("Running database migrations...")
-    run_cmd(["uv", "run", "alembic", "upgrade", "head"], check=True)
+    print("\nGreg is ready!")
+    print("  API:  http://localhost:8080")
+    print("  Docs: http://localhost:8080/docs\n")
+    cmd_server()
 
 
 def cmd_server():
-    """Start the API server (writer app)."""
-    print("Starting Greg API server...")
-    print("API docs at: http://localhost:8080/docs")
-    run_cmd(["uv", "run", "python", "main.py"])
-
-
-def cmd_songwriter():
-    """Start the Songwriter app."""
-    print("Starting Songwriter API server...")
-    print("API docs at: http://localhost:8081/docs")
-    run_cmd(["uv", "run", "uvicorn", "apps.songwriter.app:app", "--port", "8081", "--reload"])
+    """Start the API server."""
+    print("Starting API server on http://localhost:8080")
+    run(["uv", "run", "python", "main.py"])
 
 
 def cmd_worker():
     """Start the ARQ background worker."""
     print("Starting ARQ worker...")
-    run_cmd(["uv", "run", "arq", "src.jobs.worker.WorkerSettings"])
+    run(["uv", "run", "arq", "api.jobs.worker.WorkerSettings"])
 
 
-def cmd_dev():
-    """Start full development environment."""
-    print("=" * 50)
-    print("Starting Greg Development Environment")
-    print("=" * 50)
-    print()
+def cmd_console():
+    """Start interactive database console."""
+    run(["uv", "run", "python", str(ROOT / "scripts" / "console.py")])
 
-    # Start infrastructure
-    if check_docker():
-        print("[1/4] Starting infrastructure...")
-        run_cmd(["docker", "compose", "up", "-d"])
 
-        # Wait for services
-        print("[2/4] Waiting for services...")
-        if not wait_for_postgres():
-            print("Error: PostgreSQL did not start in time")
-            sys.exit(1)
-        if not wait_for_redis():
-            print("Error: Redis did not start in time")
-            sys.exit(1)
+def cmd_infra(stop: bool = False):
+    """Start or stop infrastructure."""
+    if stop:
+        print("Stopping infrastructure...")
+        run(["docker", "compose", "down"])
     else:
-        print("[1/4] Skipping infrastructure (Docker not available)")
-        print("  Make sure PostgreSQL and Redis are running manually")
-        print("[2/4] Skipping service wait")
-
-    # Run migrations
-    print("[3/4] Running migrations...")
-    run_cmd(["uv", "run", "alembic", "upgrade", "head"], check=True)
-
-    # Check Ollama
-    import shutil
-    if shutil.which("ollama"):
-        code, _, _ = run_silent(["ollama", "list"])
-        if code != 0:
-            print("  Starting Ollama...")
-            subprocess.Popen(
-                ["ollama", "serve"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            time.sleep(2)
-
-    # Start API server
-    print("[4/4] Starting API server...")
-    print()
-    print("=" * 50)
-    print("Greg is ready!")
-    print("  API: http://localhost:8080")
-    print("  Docs: http://localhost:8080/docs")
-    print("=" * 50)
-    print()
-    cmd_server()
+        if not docker_available():
+            print("Error: Docker is not running")
+            sys.exit(1)
+        print("Starting infrastructure...")
+        run(["docker", "compose", "up", "-d"])
+        print("  PostgreSQL: localhost:5433")
+        print("  Redis: localhost:6379")
 
 
-def cmd_test(args: list[str] = None):
+def cmd_migrate():
+    """Run database migrations."""
+    print("Running migrations...")
+    run(["uv", "run", "alembic", "upgrade", "head"], check=True)
+
+
+def cmd_test(args: list[str]):
     """Run tests."""
-    test_args = ["uv", "run", "pytest"]
-    if args:
-        test_args.extend(args)
-    else:
-        test_args.extend(["-v"])
-    run_cmd(test_args)
-
-
-def cmd_clean():
-    """Clean temporary files."""
-    print("Cleaning temporary files...")
-
-    patterns = [
-        "**/__pycache__",
-        "**/*.pyc",
-        ".pytest_cache",
-        "uploads/*",
-        "vector_stores/*",
-    ]
-
-    for pattern in patterns:
-        for path in ROOT.glob(pattern):
-            if path.is_dir():
-                import shutil
-                shutil.rmtree(path, ignore_errors=True)
-            elif path.is_file():
-                path.unlink(missing_ok=True)
-
-    print("Done.")
+    run(["uv", "run", "pytest", "-v"] + args)
 
 
 def cmd_models():
     """List available LLM models."""
-    print("Checking available models...\n")
+    print("Checking models...\n")
 
-    # Check Ollama models
-    import shutil
-    if shutil.which("ollama"):
-        print("Ollama Models:")
-        code, stdout, _ = run_silent(["ollama", "list"])
-        if code == 0:
-            for line in stdout.strip().split("\n"):
-                print(f"  {line}")
-        else:
-            print("  Ollama not running")
+    # Ollama
+    code, stdout = capture(["ollama", "list"])
+    if code == 0:
+        print("Ollama:")
+        for line in stdout.strip().split("\n"):
+            print(f"  {line}")
     else:
-        print("Ollama: Not installed")
+        print("Ollama: Not running or not installed")
 
-    print()
+    # API providers
+    print("\nAPI Providers:")
+    for name, key in [("Anthropic", "ANTHROPIC_API_KEY"),
+                      ("OpenAI", "OPENAI_API_KEY"),
+                      ("Google", "GOOGLE_API_KEY")]:
+        status = "configured" if os.getenv(key) else f"not set ({key})"
+        print(f"  {name}: {status}")
 
-    # Check for API keys
-    providers = {
-        "Anthropic": "ANTHROPIC_API_KEY",
-        "OpenAI": "OPENAI_API_KEY",
-        "Google": "GOOGLE_API_KEY",
-    }
 
-    print("API Providers:")
-    for name, key in providers.items():
-        if os.getenv(key):
-            print(f"  {name}: Configured")
-        else:
-            print(f"  {name}: Not configured (set {key} in .env)")
+def cmd_clean():
+    """Clean temporary files."""
+    import shutil
+
+    print("Cleaning...")
+    for pattern in ["**/__pycache__", ".pytest_cache", "uploads/*", "vector_stores/*"]:
+        for path in ROOT.glob(pattern):
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                path.unlink(missing_ok=True)
+    print("Done.")
 
 
 def cmd_help():
-    """Show help message."""
+    """Show help."""
     print(__doc__)
 
 
 def main():
-    # Load environment first
-    load_env()
+    args = sys.argv[1:]
 
-    if len(sys.argv) < 2:
+    if not args:
         cmd_help()
         return
 
-    command = sys.argv[1].lower()
-    args = sys.argv[2:]
+    cmd = args[0]
+    rest = args[1:]
 
     commands = {
-        # Development
         "dev": cmd_dev,
-        "start": cmd_dev,  # Alias
-
-        # Individual services
         "server": cmd_server,
-        "api": cmd_server,  # Alias
-        "writer": cmd_server,  # Alias
-        "songwriter": cmd_songwriter,
         "worker": cmd_worker,
-
-        # Infrastructure
-        "infra": cmd_infra,
-        "infra-stop": cmd_infra_stop,
-        "up": cmd_infra,  # Alias
-        "down": cmd_infra_stop,  # Alias
-
-        # Database
+        "console": cmd_console,
+        "db": cmd_console,  # alias
+        "infra": lambda: cmd_infra(stop=False),
+        "infra-stop": lambda: cmd_infra(stop=True),
         "migrate": cmd_migrate,
-        "db": cmd_migrate,  # Alias
-
-        # Testing
-        "test": lambda: cmd_test(args),
-
-        # Utilities
+        "test": lambda: cmd_test(rest),
         "models": cmd_models,
         "clean": cmd_clean,
-
-        # Help
         "help": cmd_help,
         "-h": cmd_help,
         "--help": cmd_help,
     }
 
-    if command in commands:
-        commands[command]()
+    if cmd in commands:
+        commands[cmd]()
     else:
-        print(f"Unknown command: {command}")
+        print(f"Unknown command: {cmd}")
         print("Run 'greg help' for available commands.")
         sys.exit(1)
 

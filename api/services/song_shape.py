@@ -15,7 +15,6 @@ when pydantic-ai calls multiple tools in parallel.
 
 import json
 import logging
-from datetime import datetime, timezone
 from typing import Callable, Optional
 from uuid import UUID
 
@@ -24,15 +23,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.enums import NoteType, SectionType
-from api.models import SongNote, SongSection
-
+from api.database.models import SongNote, SongSection
+from api.utils import utc_now
 
 logger = logging.getLogger(__name__)
-
-
-def utc_now() -> datetime:
-    """Get current UTC time (Python 3.12+ compatible)."""
-    return datetime.now(timezone.utc)
 
 
 # Type alias for session factory

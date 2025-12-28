@@ -98,6 +98,9 @@ class Document(Base, TimestampMixin):
         nullable=False,
     )
 
+    def __repr__(self) -> str:
+        return f"<Document '{self.name}' ({self.status.value})>"
+
     # Relationships
     api_key: Mapped["APIKey | None"] = relationship("APIKey")
     user: Mapped["User"] = relationship("User")

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from api.models import Song
+from api.database.models import Song
 
 warnings.warn(
     "SongStore (in-memory store) is deprecated. Use SongDBStore instead.",

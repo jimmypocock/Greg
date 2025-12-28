@@ -10,6 +10,7 @@ from typing import Generator, Optional
 
 import openai
 
+from api.observability import wrap_openai_client
 from .base import BaseLLMProvider, LLMResponse
 
 
@@ -79,7 +80,8 @@ class OpenAIProvider(BaseLLMProvider):
         self.client = None
 
         if self.api_key:
-            self.client = openai.OpenAI(api_key=self.api_key)
+            # Wrap with LangSmith for automatic tracing
+            self.client = wrap_openai_client(openai.OpenAI(api_key=self.api_key))
 
     def is_available(self) -> bool:
         """Check if OpenAI API is available."""

@@ -24,7 +24,7 @@ from pydantic_ai.messages import (
     ToolReturnPart,
 )
 
-from api.models import Song
+from api.database.models import Song
 from api.agents.critic import (
     critic_agent,
     CriticDependencies,

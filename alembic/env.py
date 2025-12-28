@@ -23,13 +23,23 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-# Import models for autogenerate support
-from api.database.models import Base
-
-# Import app-specific SQLModel models
-# Note: These are SQLModel tables, not SQLAlchemy Base models
-# They use their own metadata but we import them to ensure they're registered
-from api.models import AgentReview, Song, SongSection  # noqa: F401
+# Import all models for autogenerate support
+# This import registers all models with Base.metadata
+from api.database.models import Base  # noqa: F401
+from api.database.models import (  # noqa: F401
+    AgentReview,
+    AudioFile,
+    ChatMessage,
+    ChordPlacement,
+    Line,
+    SectionVersion,
+    Song,
+    SongCollaborator,
+    SongNote,
+    SongSection,
+    SongShareLink,
+    YjsDocument,
+)
 
 # Alembic Config object
 config = context.config

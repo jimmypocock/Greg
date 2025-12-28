@@ -19,7 +19,7 @@ from pydantic_ai import Agent, RunContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.enums import NoteType, SectionType
-from api.models import Song, SongNote, SongSection
+from api.database.models import Song, SongNote, SongSection
 from api.services.db_store import SongDBStore
 from api.services.song_note_store import SongNoteStore
 from api.agents.tools import (
@@ -434,7 +434,7 @@ async def create_sections(
 
             # Add lyrics if provided
             if lyrics and isinstance(lyrics, list):
-                from api.models import Line
+                from api.database.models import Line
                 for j, lyric_text in enumerate(lyrics):
                     if isinstance(lyric_text, str) and lyric_text.strip():
                         line = Line(text=lyric_text.strip(), order=j)
@@ -752,7 +752,7 @@ async def replace_structure(
 
             # Add lyrics if provided
             if lyrics and isinstance(lyrics, list):
-                from api.models import Line
+                from api.database.models import Line
                 for j, lyric_text in enumerate(lyrics):
                     if isinstance(lyric_text, str) and lyric_text.strip():
                         line = Line(text=lyric_text.strip(), order=j)
@@ -819,7 +819,7 @@ async def write_lyrics(
         start_order = max((l.order for l in existing_lines), default=-1) + 1
 
         # Parse and add lyrics
-        from api.models import Line
+        from api.database.models import Line
         lines_added = 0
         for i, line_text in enumerate(lyrics.strip().split("\n")):
             if line_text.strip():
@@ -876,7 +876,7 @@ async def update_lyrics(
                 await db_store.delete_line(target_section.id, line.id)
 
         # Add new lyrics
-        from api.models import Line
+        from api.database.models import Line
         lines_added = 0
         for i, line_text in enumerate(lyrics.strip().split("\n")):
             if line_text.strip():
@@ -923,7 +923,7 @@ async def write_to_slot(
         existing_lines = main_version.lines if main_version else []
         start_order = max((l.order for l in existing_lines), default=-1) + 1
 
-        from api.models import Line
+        from api.database.models import Line
         lines_added = 0
         for i, line_text in enumerate(lyrics.strip().split("\n")):
             if line_text.strip():
@@ -969,7 +969,7 @@ async def replace_slot_lyrics(
                 await db_store.delete_line(target_section.id, line.id)
 
         # Add new lyrics
-        from api.models import Line
+        from api.database.models import Line
         lines_added = 0
         for i, line_text in enumerate(lyrics.strip().split("\n")):
             if line_text.strip():
