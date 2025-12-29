@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth import CurrentUser
 from api.database import get_session_dependency
 
-from api.enums import AgentTaskType, AgentType, CollaboratorRole, SectionType, SongStatus
+from api.enums import AgentTaskType, AgentType, CollaboratorRole, LineType, SectionType, SongStatus
 from api.database.models import (
     ChordPlacement,
     Line,
@@ -95,6 +95,7 @@ class LineResponse(BaseModel):
 
     id: UUID
     text: str
+    line_type: LineType
     order: int
     notes: Optional[str]
     chords: list[ChordResponse]
@@ -107,6 +108,7 @@ class LineResponse(BaseModel):
         return cls(
             id=line.id,
             text=line.text,
+            line_type=line.line_type or LineType.LYRIC,
             order=line.order,
             notes=line.notes,
             chords=[
@@ -1300,3 +1302,115 @@ async def structure_brain_dump(
         message=f"Created structured version with {sections_created} sections. "
         f"Review and promote to main when ready.",
     )
+
+
+# Canvas Editor Support
+
+class CanvasChord(BaseModel):
+    """A chord placement in the canvas format."""
+
+    chord: str
+    position: int
+
+
+class CanvasLine(BaseModel):
+    """A line in the canvas format."""
+
+    text: str
+    line_type: LineType = LineType.LYRIC
+    chords: list[CanvasChord] = []
+
+
+class CanvasSection(BaseModel):
+    """A section in the canvas format."""
+
+    type: SectionType
+    number: Optional[int] = None
+    lines: list[CanvasLine] = []
+
+
+class CanvasSaveRequest(BaseModel):
+    """Request to save canvas editor content."""
+
+    sections: list[CanvasSection]
+    raw_text: Optional[str] = None  # Optional: store the raw canvas text
+
+
+@router.put("/{song_id}/canvas", response_model=SongResponse)
+async def save_canvas(
+    song_id: UUID,
+    request: CanvasSaveRequest,
+    user: CurrentUser,
+    store: Annotated[SongDBStore, Depends(get_db_store)],
+    perm_service: PermissionService,
+):
+    """
+    Save canvas editor content to the song.
+
+    This replaces all existing sections with the canvas content.
+    The backend handles all the diffing logic - the frontend just sends
+    the current document state.
+
+    Requires write access.
+    """
+    await perm_service.require_permission(song_id, user.id, Permission.WRITE)
+
+    song = await store.get(song_id)
+    if not song:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Song not found: {song_id}",
+        )
+
+    # Delete existing sections first
+    for section in list(song.sections):
+        await store.delete_section(section.id)
+
+    # Create new sections with lines and chords
+    for i, canvas_section in enumerate(request.sections):
+        # Create section
+        section = SongSection(
+            song_id=song_id,
+            type=canvas_section.type,
+            number=canvas_section.number,
+            order=i,
+        )
+        await store.add_section(song_id, section)
+
+        # Add lines to the section
+        for j, canvas_line in enumerate(canvas_section.lines):
+            line = Line(
+                text=canvas_line.text,
+                line_type=canvas_line.line_type,
+                order=j,
+            )
+            await store.add_line(section.id, line)
+
+            # Add chords to the line
+            for chord_data in canvas_line.chords:
+                chord = ChordPlacement(
+                    line_id=line.id,
+                    chord=chord_data.chord,
+                    position=chord_data.position,
+                )
+                await store.add_chord(line.id, chord)
+
+    # Optionally update raw_input with the canvas text
+    updates = {}
+    if request.raw_text:
+        updates["raw_input"] = request.raw_text
+
+    # Update status to DRAFT if it was IDEA (indicates work has started)
+    if song.status == SongStatus.IDEA:
+        updates["status"] = SongStatus.DRAFT
+
+    if updates:
+        await store.update(song_id, updates)
+
+    song = await store.get(song_id)
+    logger.info(
+        f"Saved canvas content for song: {song.title} "
+        f"({len(request.sections)} sections) by user {user.email}"
+    )
+
+    return SongResponse.from_song(song)

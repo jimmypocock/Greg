@@ -3,13 +3,14 @@
 import { use, useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines, useAddChord, useRemoveChord, songKeys } from '@/hooks/queries/songs';
+import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines, useAddChord, useRemoveChord, useSaveCanvas, songKeys } from '@/hooks/queries/songs';
 import { duplicateVersion, promoteVersion } from '@/lib/versions';
 import { useUploadAudio } from '@/hooks/queries/audio';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThreePaneLayout } from '@/components/layout/ThreePaneLayout';
 import { ToolboxPanel } from '@/components/toolbox/ToolboxPanel';
 import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
+import { CodeMirrorCanvas, toApiFormat } from '@/components/canvas';
 import { AIChatPanel } from '@/components/chat/AIChatPanel';
 import { SongStatus, StructureSuggestion, SectionType } from '@/types';
 import { useUndoRedo } from '@/hooks/useUndoRedo';
@@ -48,6 +49,7 @@ function SongPageContent({ params }: PageProps) {
   const uploadAudio = useUploadAudio(resolvedParams.id);
   const addChord = useAddChord(resolvedParams.id);
   const removeChord = useRemoveChord(resolvedParams.id);
+  const saveCanvasMutation = useSaveCanvas(resolvedParams.id);
   const queryClient = useQueryClient();
 
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
@@ -57,6 +59,7 @@ function SongPageContent({ params }: PageProps) {
   const [focusLineId, setFocusLineId] = useState<string | null>(null);
   const [focusCursorPosition, setFocusCursorPosition] = useState<number>(0);
   const [showChords, setShowChords] = useState(true);
+  const [editorMode, setEditorMode] = useState<'sections' | 'canvas'>('sections');
 
   // Undo/Redo support
   const { pushAction, undo, redo, canUndo, canRedo, isPerformingAction } = useUndoRedo();
@@ -521,6 +524,31 @@ function SongPageContent({ params }: PageProps) {
             Greg
           </Link>
           <div className="flex items-center gap-2">
+            {/* Editor Mode Toggle */}
+            <div className="flex items-center border-r border-gray-200 dark:border-gray-700 pr-2 mr-2">
+              <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+                <button
+                  onClick={() => setEditorMode('sections')}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    editorMode === 'sections'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Sections
+                </button>
+                <button
+                  onClick={() => setEditorMode('canvas')}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    editorMode === 'canvas'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Canvas
+                </button>
+              </div>
+            </div>
             {/* Undo/Redo buttons */}
             <div className="flex items-center border-r border-gray-200 dark:border-gray-700 pr-2 mr-2">
               <button
@@ -651,32 +679,44 @@ function SongPageContent({ params }: PageProps) {
           />
         }
         centerPanel={
-          <LivePreviewPanel
-            song={song}
-            selectedSectionId={selectedSectionId}
-            onSectionClick={setSelectedSectionId}
-            editable={true}
-            showChords={showChords}
-            onToggleChords={handleToggleChords}
-            onAddChord={handleAddChord}
-            onRemoveChord={handleRemoveChord}
-            onUpdateLine={handleUpdateLine}
-            onAddLineAfter={handleAddLineAfter}
-            onDeleteLine={handleDeleteLine}
-            onMergeWithPrevious={handleMergeWithPrevious}
-            onAddSectionAfter={handleAddSectionAfter}
-            onDeleteSection={handleDeleteSection}
-            onUpdateSection={handleUpdateSection}
-            onReorderSections={handleReorderSections}
-            onAddSection={handleAddSection}
-            onDuplicateVersion={handleDuplicateVersion}
-            onSwitchVersion={handleSwitchVersion}
-            onUploadAudio={handleUploadVersionAudio}
-            isUploadingAudio={uploadAudio.isPending}
-            focusLineId={focusLineId}
-            focusCursorPosition={focusCursorPosition}
-            onFocusHandled={handleFocusHandled}
-          />
+          editorMode === 'canvas' ? (
+            <div className="h-full overflow-auto p-4">
+              <CodeMirrorCanvas
+                song={song}
+                onSave={(parsed) => {
+                  const apiData = toApiFormat(parsed);
+                  saveCanvasMutation.mutate(apiData);
+                }}
+              />
+            </div>
+          ) : (
+            <LivePreviewPanel
+              song={song}
+              selectedSectionId={selectedSectionId}
+              onSectionClick={setSelectedSectionId}
+              editable={true}
+              showChords={showChords}
+              onToggleChords={handleToggleChords}
+              onAddChord={handleAddChord}
+              onRemoveChord={handleRemoveChord}
+              onUpdateLine={handleUpdateLine}
+              onAddLineAfter={handleAddLineAfter}
+              onDeleteLine={handleDeleteLine}
+              onMergeWithPrevious={handleMergeWithPrevious}
+              onAddSectionAfter={handleAddSectionAfter}
+              onDeleteSection={handleDeleteSection}
+              onUpdateSection={handleUpdateSection}
+              onReorderSections={handleReorderSections}
+              onAddSection={handleAddSection}
+              onDuplicateVersion={handleDuplicateVersion}
+              onSwitchVersion={handleSwitchVersion}
+              onUploadAudio={handleUploadVersionAudio}
+              isUploadingAudio={uploadAudio.isPending}
+              focusLineId={focusLineId}
+              focusCursorPosition={focusCursorPosition}
+              onFocusHandled={handleFocusHandled}
+            />
+          )
         }
         rightPanel={
           <ToolboxPanel

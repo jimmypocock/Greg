@@ -3,26 +3,33 @@
  */
 
 export enum SectionType {
-  INTRO = 'intro',
-  VERSE = 'verse',
-  PRE_CHORUS = 'pre-chorus',
-  CHORUS = 'chorus',
-  POST_CHORUS = 'post-chorus',
-  BRIDGE = 'bridge',
-  OUTRO = 'outro',
-  INSTRUMENTAL = 'instrumental',
-  SOLO = 'solo',
-  BREAKDOWN = 'breakdown',
-  BRAIN_DUMP = 'brain-dump',  // Unstructured content for brainstorming
-  OTHER = 'other',
+  INTRO = 'INTRO',
+  VERSE = 'VERSE',
+  PRE_CHORUS = 'PRE_CHORUS',
+  CHORUS = 'CHORUS',
+  POST_CHORUS = 'POST_CHORUS',
+  BRIDGE = 'BRIDGE',
+  OUTRO = 'OUTRO',
+  INSTRUMENTAL = 'INSTRUMENTAL',
+  SOLO = 'SOLO',
+  BREAKDOWN = 'BREAKDOWN',
+  BRAIN_DUMP = 'BRAIN_DUMP',
+  OTHER = 'OTHER',
 }
 
 export enum SongStatus {
-  IDEA = 'idea',
-  DRAFT = 'draft',
-  IN_PROGRESS = 'in_progress',
-  REVIEW = 'review',
-  FINISHED = 'finished',
+  IDEA = 'IDEA',
+  DRAFT = 'DRAFT',
+  IN_PROGRESS = 'IN_PROGRESS',
+  REVIEW = 'REVIEW',
+  FINISHED = 'FINISHED',
+}
+
+export enum LineType {
+  LYRIC = 'LYRIC',
+  CHORD = 'CHORD',
+  SECTION_HEADER = 'SECTION_HEADER',
+  ANNOTATION = 'ANNOTATION',
 }
 
 export enum NoteType {
@@ -49,6 +56,7 @@ export interface ChordPlacement {
 
 export interface Line {
   id: string;
+  line_type: LineType;
   text: string;
   order: number;
   notes?: string | null;
@@ -230,6 +238,30 @@ export interface DeleteLineRequest {
 
 export interface ApplyStructureRequest {
   sections: SuggestionSection[];
+}
+
+// Canvas Editor types
+
+export interface CanvasChord {
+  chord: string;
+  position: number;
+}
+
+export interface CanvasLine {
+  text: string;
+  line_type: LineType;
+  chords: CanvasChord[];
+}
+
+export interface CanvasSection {
+  type: SectionType;
+  number?: number;
+  lines: CanvasLine[];
+}
+
+export interface CanvasSaveRequest {
+  sections: CanvasSection[];
+  raw_text?: string;
 }
 
 // Song Notes request/response types

@@ -53,9 +53,9 @@ class SongCollaborator(Base, TimestampMixin):
         UUID(as_uuid=True),
         nullable=True,
     )
-    invited_at: Mapped[datetime] = mapped_column(
+    invited_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
+        nullable=True,
     )
 
     # When the user accepted the invitation (null if pending)

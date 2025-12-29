@@ -5,11 +5,12 @@ Line model.
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database.models.base import Base, TimestampMixin
+from api.enums import LineType
 
 if TYPE_CHECKING:
     from api.database.models.chord_placement import ChordPlacement
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class Line(Base, TimestampMixin):
-    """A single line of lyrics within a section version."""
+    """A single line in a song document (lyric, chord, section header, or annotation)."""
 
     __tablename__ = "lines"
 
@@ -33,6 +34,11 @@ class Line(Base, TimestampMixin):
         index=True,
     )
 
+    line_type: Mapped[LineType] = mapped_column(
+        Enum(LineType, name="linetype", create_type=False),
+        default=LineType.LYRIC,
+        nullable=False,
+    )
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     text: Mapped[str] = mapped_column(Text, default="", nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

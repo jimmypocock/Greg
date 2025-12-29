@@ -7,23 +7,23 @@ class AgentTaskType(str, Enum):
     """Types of tasks agents can perform."""
 
     # Critic tasks
-    FULL_REVIEW = "full_review"
-    SECTION_REVIEW = "section_review"
-    CHECK_CLICHES = "check_cliches"
-    ANALYZE_RHYTHM = "analyze_rhythm"
+    FULL_REVIEW = "FULL_REVIEW"
+    SECTION_REVIEW = "SECTION_REVIEW"
+    CHECK_CLICHES = "CHECK_CLICHES"
+    ANALYZE_RHYTHM = "ANALYZE_RHYTHM"
 
     # Structure tasks
-    STRUCTURE_ANALYSIS = "structure_analysis"
+    STRUCTURE_ANALYSIS = "STRUCTURE_ANALYSIS"
 
     # Orchestrator tasks (conversational chat)
-    CHAT = "chat"
+    CHAT = "CHAT"
 
     # Lyricist tasks (future)
-    WRITE_SECTION = "write_section"
-    SUGGEST_LYRICS = "suggest_lyrics"
+    WRITE_SECTION = "WRITE_SECTION"
+    SUGGEST_LYRICS = "SUGGEST_LYRICS"
 
     # Melody tasks (future)
-    SUGGEST_CHORDS = "suggest_chords"
+    SUGGEST_CHORDS = "SUGGEST_CHORDS"
 
     # Song shaper tasks (new song exploration)
-    SHAPE_EXPLORATION = "shape_exploration"  # Build song shape through conversation
+    SHAPE_EXPLORATION = "SHAPE_EXPLORATION"

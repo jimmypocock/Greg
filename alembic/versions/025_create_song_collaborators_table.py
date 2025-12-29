@@ -52,7 +52,7 @@ def upgrade() -> None:
 
         # Invitation tracking
         sa.Column("invited_by", sa.UUID(), nullable=True),
-        sa.Column("invited_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("invited_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("accepted_at", sa.TIMESTAMP(timezone=True), nullable=True),
 
         # Timestamps

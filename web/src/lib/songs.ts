@@ -190,3 +190,14 @@ export async function unresolveNote(songId: string, noteId: string): Promise<Son
 export async function getAIContext(songId: string): Promise<ContextResponse> {
   return get<ContextResponse>(`/songs/${songId}/context`);
 }
+
+// ============================================================================
+// Canvas Editor API
+// ============================================================================
+
+import { CanvasSaveRequest } from '@/types';
+
+// Save canvas editor content
+export async function saveCanvas(id: string, data: CanvasSaveRequest): Promise<Song> {
+  return put<Song, CanvasSaveRequest>(`/songs/${id}/canvas`, data);
+}

@@ -37,7 +37,7 @@ def upgrade() -> None:
     op.execute(
         "CREATE TYPE sectiontype AS ENUM ("
         "'INTRO', 'VERSE', 'PRE_CHORUS', 'CHORUS', 'POST_CHORUS', "
-        "'BRIDGE', 'OUTRO', 'INSTRUMENTAL', 'SOLO', 'BREAKDOWN', 'OTHER'"
+        "'BRIDGE', 'OUTRO', 'INSTRUMENTAL', 'SOLO', 'BREAKDOWN', 'BRAIN_DUMP', 'OTHER'"
         ")"
     )
 
@@ -55,7 +55,7 @@ def upgrade() -> None:
             "type",
             postgresql.ENUM(
                 "INTRO", "VERSE", "PRE_CHORUS", "CHORUS", "POST_CHORUS",
-                "BRIDGE", "OUTRO", "INSTRUMENTAL", "SOLO", "BREAKDOWN", "OTHER",
+                "BRIDGE", "OUTRO", "INSTRUMENTAL", "SOLO", "BREAKDOWN", "BRAIN_DUMP", "OTHER",
                 name="sectiontype",
                 create_type=False,
             ),

@@ -23,6 +23,7 @@ import {
   deleteLine,
   deleteSection,
   reorderLines,
+  saveCanvas,
 } from '@/lib/songs';
 import {
   SongCreateRequest,
@@ -36,6 +37,7 @@ import {
   ReorderSectionsRequest,
   DeleteLineRequest,
   ApplyStructureRequest,
+  CanvasSaveRequest,
 } from '@/types';
 
 // Query keys
@@ -256,6 +258,18 @@ export function useReorderLines(id: string) {
     mutationFn: (data: { section_id: string; line_ids: string[] }) => reorderLines(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: songKeys.detail(id) });
+    },
+  });
+}
+
+// Save canvas editor content
+export function useSaveCanvas(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CanvasSaveRequest) => saveCanvas(id, data),
+    onSuccess: (song) => {
+      queryClient.setQueryData(songKeys.detail(id), song);
+      queryClient.invalidateQueries({ queryKey: songKeys.lists() });
     },
   });
 }
