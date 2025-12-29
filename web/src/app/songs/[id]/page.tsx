@@ -680,7 +680,7 @@ function SongPageContent({ params }: PageProps) {
         }
         centerPanel={
           editorMode === 'canvas' ? (
-            <div className="h-full overflow-auto p-4">
+            <div className="h-full overflow-auto py-4">
               <CodeMirrorCanvas
                 song={song}
                 onSave={(parsed) => {

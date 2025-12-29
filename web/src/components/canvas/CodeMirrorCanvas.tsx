@@ -9,19 +9,19 @@
 
 import { useCallback, useMemo, useRef, useEffect } from 'react';
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { EditorView, keymap, ViewUpdate, gutter, GutterMarker } from '@codemirror/view';
+import { EditorView, keymap, ViewUpdate, gutter, GutterMarker, Decoration, DecorationSet, placeholder } from '@codemirror/view';
 import { StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { Song, LineType } from '@/types/song';
 import { chordAnnotations, ChordAnnotation, getChords } from './chordAnnotations';
 import { parseDocument, ParsedDocument, toApiFormat } from './parseDocument';
 
-// Line type icons
+// Line type icons (match keyboard shortcuts)
 const LINE_ICONS: Record<LineType, string> = {
-  [LineType.SECTION_HEADER]: '§',
-  [LineType.CHORD]: '♪',
-  [LineType.ANNOTATION]: '✎',
-  [LineType.LYRIC]: '¶',
+  [LineType.SECTION_HEADER]: '#',
+  [LineType.CHORD]: '>',
+  [LineType.ANNOTATION]: '//',
+  [LineType.LYRIC]: '',
 };
 
 // Line type cycle order (for clicking to change)
@@ -48,17 +48,30 @@ const lineTypesField = StateField.define<Map<number, LineType>>({
       const oldDoc = tr.startState.doc;
       const newDoc = tr.newDoc;
 
-      // Map old line numbers to new line numbers
-      for (const [oldLineNum, type] of types) {
-        if (oldLineNum <= oldDoc.lines) {
-          const oldLine = oldDoc.line(oldLineNum);
-          // Find where this line ended up
-          const newPos = tr.changes.mapPos(oldLine.from, 1);
-          if (newPos < newDoc.length) {
-            const newLineNum = newDoc.lineAt(newPos).number;
-            newTypes.set(newLineNum, type);
+      // Track which old line number first mapped to each new line
+      // This ensures when lines merge, the FIRST (surviving) line's type wins
+      const firstOldLineForNew = new Map<number, number>();
+
+      // Determine which old line each new line came from (process in order)
+      for (let oldLineNum = 1; oldLineNum <= oldDoc.lines; oldLineNum++) {
+        const oldLine = oldDoc.line(oldLineNum);
+        const newPos = tr.changes.mapPos(oldLine.from, -1);
+        if (newPos <= newDoc.length) {
+          const newLineNum = newDoc.lineAt(newPos).number;
+          // Only record the first old line that maps to each new line
+          if (!firstOldLineForNew.has(newLineNum)) {
+            firstOldLineForNew.set(newLineNum, oldLineNum);
           }
         }
+      }
+
+      // For each new line, use the type of the first old line that mapped to it
+      for (const [newLineNum, oldLineNum] of firstOldLineForNew) {
+        const type = types.get(oldLineNum);
+        if (type) {
+          newTypes.set(newLineNum, type);
+        }
+        // If no type, it defaults to LYRIC (no entry needed)
       }
     }
 
@@ -148,6 +161,41 @@ const lineTypeGutter = gutter({
   },
 });
 
+// Line decorations for styling each line type
+const lineDecorations: Record<LineType, Decoration> = {
+  [LineType.LYRIC]: Decoration.line({ class: 'cm-line-lyric' }),
+  [LineType.SECTION_HEADER]: Decoration.line({ class: 'cm-line-section' }),
+  [LineType.CHORD]: Decoration.line({ class: 'cm-line-chord' }),
+  [LineType.ANNOTATION]: Decoration.line({ class: 'cm-line-annotation' }),
+};
+
+// StateField that provides line decorations based on line types
+const lineTypeDecorations = StateField.define<DecorationSet>({
+  create(state) {
+    return buildLineDecorations(state);
+  },
+  update(decorations, tr) {
+    if (tr.docChanged || tr.effects.some(e => e.is(setLineType))) {
+      return buildLineDecorations(tr.state);
+    }
+    return decorations;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+function buildLineDecorations(state: { doc: { lines: number; line: (n: number) => { from: number } }; field: (field: StateField<Map<number, LineType>>) => Map<number, LineType> }): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const types = state.field(lineTypesField);
+
+  for (let i = 1; i <= state.doc.lines; i++) {
+    const lineType = types.get(i) || LineType.LYRIC;
+    const line = state.doc.line(i);
+    builder.add(line.from, line.from, lineDecorations[lineType]);
+  }
+
+  return builder.finish();
+}
+
 // Export helper to get all line types from editor state
 export function getLineTypes(state: { field: (field: StateField<Map<number, LineType>>) => Map<number, LineType>, doc: { lines: number } }): Map<number, LineType> {
   return state.field(lineTypesField);
@@ -166,19 +214,27 @@ const backspaceToLyric = keymap.of([
     key: 'Backspace',
     run: (view) => {
       const { state } = view;
-      const { from } = state.selection.main;
+      const selection = state.selection.main;
 
-      // Check if cursor is at the start of a line
-      const line = state.doc.lineAt(from);
-      if (from !== line.from) {
-        // Not at start of line, let default behavior handle it
+      // Only handle if it's a cursor (not a selection)
+      if (!selection.empty) {
         return false;
       }
 
-      // Check if this line has a non-lyric type
-      const currentType = getLineType(state, line.number);
+      const from = selection.from;
+      const line = state.doc.lineAt(from);
+
+      // Check if cursor is at the start of a line
+      if (from !== line.from) {
+        return false;
+      }
+
+      // Get the line type from the state field directly
+      const types = state.field(lineTypesField);
+      const currentType = types.get(line.number) || LineType.LYRIC;
+
+      // If already a lyric, let default behavior handle it
       if (currentType === LineType.LYRIC) {
-        // Already a lyric, let default behavior handle it (join with previous line)
         return false;
       }
 
@@ -187,7 +243,7 @@ const backspaceToLyric = keymap.of([
         effects: setLineType.of({ lineNumber: line.number, type: LineType.LYRIC }),
       });
 
-      return true; // We handled it
+      return true; // We handled it, prevent default backspace
     },
   },
 ]);
@@ -359,11 +415,13 @@ export function CodeMirrorCanvas({
     backspaceToLyric, // Must come before default keymap
     keymap.of([...defaultKeymap, ...historyKeymap]),
     lineTypesField.init(() => initialLineTypes),
+    lineTypeDecorations,
     lineTypeGutter,
     prefixDetector,
     baseTheme,
     EditorView.lineWrapping,
     chordAnnotations(initialChords),
+    placeholder('Write your next hit...'),
     EditorView.contentAttributes.of({ 'aria-label': 'Song editor' }),
   ], [initialChords, initialLineTypes]);
 
@@ -398,22 +456,20 @@ export function CodeMirrorCanvas({
   return (
     <div className="codemirror-canvas w-full max-w-3xl mx-auto">
       {/* Header hints */}
-      <div className="mb-2 text-xs text-gray-400 dark:text-gray-500 flex gap-3 px-2">
+      <div className="mb-2 text-xs text-gray-400 dark:text-gray-500 flex gap-4 px-2">
         <span>
-          <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#</code> section
+          <code className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded font-semibold">#</code> section
         </span>
         <span>
-          <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">&gt;</code> chord
+          <code className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded font-semibold">&gt;</code> chord
         </span>
         <span>
-          <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">//</code> note
+          <code className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded font-semibold">//</code> note
         </span>
-        <span className="text-gray-300 dark:text-gray-600">|</span>
-        <span>or click gutter icon</span>
       </div>
 
       {/* Editor */}
-      <div className="bg-white dark:bg-gray-900 rounded-lg">
+      <div>
         <CodeMirror
           ref={editorRef}
           value={initialContent}
@@ -448,52 +504,95 @@ Add chord progressions with >"
 
       {/* Footer hints */}
       <div className="mt-2 text-xs text-gray-400 dark:text-gray-500 px-2">
-        Type prefix to set type · Backspace at start resets to lyric · Cmd+S to save
+        Type prefix to set type · Click gutter to change type · Cmd+S to save
       </div>
 
-      {/* CSS variables for syntax highlighting */}
+      {/* CSS for line type styling */}
       <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&display=swap');
+
         .song-editor .cm-editor {
           background: transparent;
         }
         .song-editor .cm-scroller {
-          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+          font-family: "Roboto Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
         }
-        :root {
-          --song-header-color: #1f2937;
-          --song-chord-color: #2563eb;
-          --song-annotation-color: #6b7280;
+        .song-editor .cm-placeholder {
+          color: #9ca3af;
+          font-style: italic;
         }
-        .dark {
-          --song-header-color: #f3f4f6;
-          --song-chord-color: #60a5fa;
-          --song-annotation-color: #9ca3af;
-        }
+
         /* Line type gutter icons */
         .line-type-icon {
-          font-size: 12px;
+          font-size: 14px;
+          font-weight: 600;
           cursor: pointer;
           user-select: none;
-          opacity: 0.5;
+          opacity: 0.6;
           transition: opacity 0.15s;
+          line-height: 1;
         }
         .cm-gutterElement:hover .line-type-icon {
           opacity: 1;
         }
+        .cm-lineType-gutter {
+          background-color: #f9fafb;
+          padding: 0 4px;
+        }
+        .dark .cm-lineType-gutter {
+          background-color: #1f2937;
+        }
         .cm-lineType-gutter .cm-gutterElement {
           cursor: pointer;
         }
-        .line-type-section {
-          color: var(--song-header-color, #1f2937);
-          font-weight: bold;
+
+        /* Gutter icon colors */
+        .line-type-section { color: #333333; font-weight: bold; }
+        .line-type-chord { color: #2563eb; }
+        .line-type-annotation { color: #6b7280; }
+        .line-type-lyric { color: #9ca3af; }
+        .dark .line-type-section { color: #e5e5e5; }
+
+        /* === LINE CONTENT STYLES === */
+
+        /* Lyric lines - default, clean look */
+        .cm-line-lyric {
+          color: #333333;
         }
-        .line-type-chord {
-          color: var(--song-chord-color, #2563eb);
+        .dark .cm-line-lyric {
+          color: #e5e5e5;
         }
-        .line-type-annotation {
-          color: var(--song-annotation-color, #6b7280);
+
+        /* Section headers - bold, dark, larger */
+        .cm-line-section {
+          color: #333333;
+          font-weight: 700;
+          font-size: 1.1em;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
         }
-        .line-type-lyric {
+        .dark .cm-line-section {
+          color: #e5e5e5;
+        }
+
+        /* Chord lines - blue, monospace */
+        .cm-line-chord {
+          color: #2563eb;
+          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+          font-size: 0.9em;
+          letter-spacing: 0.1em;
+        }
+        .dark .cm-line-chord {
+          color: #60a5fa;
+        }
+
+        /* Annotation lines - italic, muted */
+        .cm-line-annotation {
+          color: #6b7280;
+          font-style: italic;
+          opacity: 0.8;
+        }
+        .dark .cm-line-annotation {
           color: #9ca3af;
         }
       `}</style>
