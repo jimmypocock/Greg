@@ -1,11 +1,14 @@
 """Yjs WebSocket provider for real-time collaborative editing.
 
 This module provides the server-side WebSocket handling for Yjs CRDT
-synchronization. It handles:
+synchronization with Redis pub/sub for multi-server support.
+
+Features:
 - Client connections and authentication
 - Document synchronization (sync protocol)
-- Broadcasting changes to all connected clients
-- Persistence to the database
+- Redis pub/sub for cross-server broadcasting
+- Debounced persistence to the database
+- In-memory document cache with eviction
 """
 
 import asyncio
@@ -15,10 +18,17 @@ from dataclasses import dataclass, field
 from typing import Optional
 from uuid import UUID
 
-from fastapi import WebSocket, WebSocketDisconnect
-from pycrdt import Doc, Array, Map, Text
+import redis.asyncio as aioredis
+from fastapi import WebSocket
 
 from api.services.yjs_store import YjsDocumentStore
+
+# Import pycrdt - handle potential import issues
+try:
+    from pycrdt import Doc
+except ImportError:
+    Doc = None
+    logging.warning("pycrdt not available - Yjs features disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +42,41 @@ MSG_SYNC_RESPONSE = 1
 MSG_SYNC_UPDATE = 2
 
 
+def write_var_uint(value: int) -> bytes:
+    """Encode an unsigned integer using variable-length encoding (y-protocols format)."""
+    result = []
+    while value > 0x7F:
+        result.append((value & 0x7F) | 0x80)
+        value >>= 7
+    result.append(value & 0x7F)
+    return bytes(result) if result else bytes([0])
+
+
+def read_var_uint(data: bytes, offset: int = 0) -> tuple[int, int]:
+    """Decode a variable-length unsigned integer. Returns (value, new_offset)."""
+    value = 0
+    shift = 0
+    while offset < len(data):
+        byte = data[offset]
+        value |= (byte & 0x7F) << shift
+        offset += 1
+        if (byte & 0x80) == 0:
+            break
+        shift += 7
+    return value, offset
+
+
+def write_var_byte_array(data: bytes) -> bytes:
+    """Encode a byte array with length prefix (y-protocols format)."""
+    return write_var_uint(len(data)) + data
+
+
+def read_var_byte_array(data: bytes, offset: int = 0) -> tuple[bytes, int]:
+    """Decode a length-prefixed byte array. Returns (bytes, new_offset)."""
+    length, offset = read_var_uint(data, offset)
+    return data[offset:offset + length], offset + length
+
+
 @dataclass
 class ConnectedClient:
     """A connected WebSocket client."""
@@ -43,19 +88,99 @@ class ConnectedClient:
 
 
 class YjsProvider:
-    """Provider for Yjs WebSocket synchronization.
+    """
+    Provider for Yjs WebSocket synchronization with Redis pub/sub.
 
     Manages connections, synchronization, and persistence for
-    collaborative Yjs documents.
+    collaborative Yjs documents across multiple server instances.
     """
+
+    # Configuration
+    MAX_DOCS_IN_MEMORY = 500
+    MAX_CLIENTS_PER_DOC = 50
+    PERSIST_DEBOUNCE_SECONDS = 2.0
+    DOC_IDLE_TIMEOUT_SECONDS = 300  # 5 minutes
 
     def __init__(self):
         # Map of song_id -> list of connected clients
         self._connections: dict[UUID, list[ConnectedClient]] = defaultdict(list)
         # Map of song_id -> Yjs Doc
         self._documents: dict[UUID, Doc] = {}
+        # Map of song_id -> last access timestamp
+        self._doc_last_access: dict[UUID, float] = {}
+        # Map of song_id -> pending persist task
+        self._persist_tasks: dict[UUID, asyncio.Task] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
+
+        # Redis
+        self._redis: Optional[aioredis.Redis] = None
+        self._pubsub: Optional[aioredis.client.PubSub] = None
+        self._pubsub_task: Optional[asyncio.Task] = None
+        self._subscribed_songs: set[UUID] = set()
+
+        # Initialization state
+        self._initialized = False
+
+    async def initialize(self, redis_url: str) -> None:
+        """
+        Initialize Redis connection and start pub/sub listener.
+
+        Args:
+            redis_url: Redis connection URL (e.g., redis://localhost:6379)
+        """
+        if self._initialized:
+            return
+
+        try:
+            self._redis = await aioredis.from_url(
+                redis_url,
+                encoding="utf-8",
+                decode_responses=False,  # We need bytes for Yjs
+            )
+            # Test connection
+            await self._redis.ping()
+
+            # Start pub/sub listener
+            self._pubsub = self._redis.pubsub()
+            self._pubsub_task = asyncio.create_task(self._pubsub_listener())
+
+            self._initialized = True
+            logger.info("YjsProvider initialized with Redis")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize YjsProvider with Redis: {e}")
+            # Continue without Redis - local-only mode
+            self._redis = None
+            self._initialized = True
+
+    async def shutdown(self) -> None:
+        """Clean shutdown of Redis connections."""
+        # Cancel pub/sub listener
+        if self._pubsub_task:
+            self._pubsub_task.cancel()
+            try:
+                await self._pubsub_task
+            except asyncio.CancelledError:
+                pass
+
+        # Close pub/sub
+        if self._pubsub:
+            await self._pubsub.close()
+
+        # Close Redis connection
+        if self._redis:
+            await self._redis.close()
+
+        # Cancel pending persist tasks
+        for task in self._persist_tasks.values():
+            task.cancel()
+
+        logger.info("YjsProvider shutdown complete")
+
+    # ─────────────────────────────────────────────────────────────
+    # CONNECTION MANAGEMENT
+    # ─────────────────────────────────────────────────────────────
 
     async def connect(
         self,
@@ -63,8 +188,25 @@ class YjsProvider:
         song_id: UUID,
         user_id: UUID,
         store: YjsDocumentStore,
-    ) -> ConnectedClient:
-        """Handle a new WebSocket connection."""
+    ) -> Optional[ConnectedClient]:
+        """
+        Handle a new WebSocket connection.
+
+        Args:
+            websocket: The WebSocket connection
+            song_id: Song being edited
+            user_id: User connecting
+            store: Yjs document store for persistence
+
+        Returns:
+            ConnectedClient or None if connection rejected
+        """
+        # Check connection limit
+        if len(self._connections[song_id]) >= self.MAX_CLIENTS_PER_DOC:
+            logger.warning(f"Connection limit reached for song {song_id}")
+            await websocket.close(code=1013, reason="Too many editors")
+            return None
+
         await websocket.accept()
 
         client = ConnectedClient(
@@ -76,10 +218,23 @@ class YjsProvider:
         async with self._lock:
             self._connections[song_id].append(client)
 
-            # Load or create document if not in memory
+            # Load document if not in memory
             if song_id not in self._documents:
                 doc = await self._load_document(song_id, store)
                 self._documents[song_id] = doc
+
+            # Update access time
+            self._doc_last_access[song_id] = asyncio.get_event_loop().time()
+
+            # Subscribe to Redis channel for this song
+            await self._subscribe_to_song(song_id)
+
+            # Track client in Redis (for monitoring)
+            if self._redis:
+                try:
+                    await self._redis.sadd(f"yjs:clients:{song_id}", str(user_id))
+                except Exception as e:
+                    logger.warning(f"Failed to track client in Redis: {e}")
 
         logger.info(
             f"Client connected to song {song_id}: user={user_id}, "
@@ -92,71 +247,96 @@ class YjsProvider:
         self,
         client: ConnectedClient,
         store: YjsDocumentStore,
-    ):
+    ) -> None:
         """Handle a WebSocket disconnection."""
         song_id = client.song_id
 
         async with self._lock:
+            # Remove client from connections
             if song_id in self._connections:
                 self._connections[song_id] = [
                     c for c in self._connections[song_id]
                     if c.websocket != client.websocket
                 ]
 
-                # If no more clients, persist and remove document
+                # Update Redis client tracking
+                if self._redis:
+                    try:
+                        await self._redis.srem(f"yjs:clients:{song_id}", str(client.user_id))
+                    except Exception:
+                        pass
+
+                # If no more clients for this song
                 if not self._connections[song_id]:
+                    # Persist document before cleanup
                     if song_id in self._documents:
-                        await self._persist_document(song_id, store, client.user_id)
-                        del self._documents[song_id]
+                        await self._persist_document_now(song_id, store, client.user_id)
+
+                    # Unsubscribe from Redis
+                    await self._unsubscribe_from_song(song_id)
+
+                    # Clean up (keep doc in memory briefly for reconnects)
                     del self._connections[song_id]
 
-        logger.info(
-            f"Client disconnected from song {song_id}: user={client.user_id}"
-        )
+        logger.info(f"Client disconnected from song {song_id}: user={client.user_id}")
+
+    # ─────────────────────────────────────────────────────────────
+    # MESSAGE HANDLING
+    # ─────────────────────────────────────────────────────────────
 
     async def handle_message(
         self,
         client: ConnectedClient,
         message: bytes,
         store: YjsDocumentStore,
-    ):
+    ) -> None:
         """Handle an incoming WebSocket message."""
         if len(message) < 1:
             return
 
-        msg_type = message[0]
+        # Decode message type using varUint
+        msg_type, offset = read_var_uint(message, 0)
+        song_id = client.song_id
+
+        # Update last access time
+        self._doc_last_access[song_id] = asyncio.get_event_loop().time()
 
         if msg_type == MSG_SYNC:
-            await self._handle_sync_message(client, message[1:], store)
+            await self._handle_sync_message(client, message[offset:], store)
         elif msg_type == MSG_AWARENESS:
-            await self._handle_awareness_message(client, message[1:])
+            await self._handle_awareness_message(client, message[offset:])
 
     async def _handle_sync_message(
         self,
         client: ConnectedClient,
         message: bytes,
         store: YjsDocumentStore,
-    ):
+    ) -> None:
         """Handle Yjs sync protocol messages."""
         if len(message) < 1:
             return
 
         song_id = client.song_id
-        msg_subtype = message[0]
-        payload = message[1:]
+
+        # Decode message subtype using varUint
+        msg_subtype, offset = read_var_uint(message, 0)
+
+        # Decode the payload (varByteArray)
+        payload, _ = read_var_byte_array(message, offset)
 
         doc = self._documents.get(song_id)
         if doc is None:
             return
 
         if msg_subtype == MSG_SYNC_REQUEST:
-            # Client requesting sync - send current state
-            state_vector = payload
+            # Client requesting sync - send full document state
             try:
-                # Get diff between client state and server state
-                diff = doc.get_update(state_vector)
-                # Send sync response with diff
-                response = bytes([MSG_SYNC, MSG_SYNC_RESPONSE]) + diff
+                full_state = doc.get_update()
+                response = (
+                    write_var_uint(MSG_SYNC) +
+                    write_var_uint(MSG_SYNC_RESPONSE) +
+                    write_var_byte_array(full_state)
+                )
                 await client.websocket.send_bytes(response)
             except Exception as e:
                 logger.error(f"Error handling sync request: {e}")
@@ -165,8 +345,7 @@ class YjsProvider:
             # Received state from client - apply update
             try:
                 doc.apply_update(payload)
-                # Persist changes
-                await self._persist_document(song_id, store, client.user_id)
+                self._schedule_persist(song_id, store, client.user_id)
             except Exception as e:
                 logger.error(f"Error applying sync response: {e}")
 
@@ -174,10 +353,21 @@ class YjsProvider:
             # Client sent an update - apply and broadcast
             try:
                 doc.apply_update(payload)
-                # Broadcast to other clients
-                await self._broadcast_update(song_id, payload, exclude=client)
-                # Persist changes
-                await self._persist_document(song_id, store, client.user_id)
+
+                # Broadcast to local clients (re-encode the message properly)
+                broadcast_msg = (
+                    write_var_uint(MSG_SYNC) +
+                    write_var_uint(MSG_SYNC_UPDATE) +
+                    write_var_byte_array(payload)
+                )
+                await self._broadcast_local(song_id, broadcast_msg, exclude=client)
+
+                # Publish to Redis for other servers
+                await self._publish_update(song_id, broadcast_msg)
+
+                # Schedule debounced persist
+                self._schedule_persist(song_id, store, client.user_id)
+
             except Exception as e:
                 logger.error(f"Error handling sync update: {e}")
 
@@ -185,28 +375,169 @@ class YjsProvider:
         self,
         client: ConnectedClient,
         message: bytes,
-    ):
+    ) -> None:
         """Handle awareness protocol messages (cursor positions, etc.)."""
-        # Broadcast awareness to other clients
         song_id = client.song_id
-        full_message = bytes([MSG_AWARENESS]) + message
 
-        for other_client in self._connections.get(song_id, []):
-            if other_client.websocket != client.websocket:
+        # Re-encode with proper varUint format
+        full_message = write_var_uint(MSG_AWARENESS) + message
+
+        # Broadcast to local clients
+        await self._broadcast_local(song_id, full_message, exclude=client)
+
+        # Publish to Redis (send the full properly encoded message)
+        await self._publish_awareness(song_id, full_message)
+
+    # ─────────────────────────────────────────────────────────────
+    # REDIS PUB/SUB
+    # ─────────────────────────────────────────────────────────────
+
+    async def _subscribe_to_song(self, song_id: UUID) -> None:
+        """Subscribe to Redis channels for a song."""
+        if not self._redis or not self._pubsub:
+            return
+
+        if song_id in self._subscribed_songs:
+            return
+
+        try:
+            await self._pubsub.subscribe(
+                f"yjs:updates:{song_id}",
+                f"yjs:awareness:{song_id}",
+            )
+            self._subscribed_songs.add(song_id)
+            logger.debug(f"Subscribed to Redis channels for song {song_id}")
+        except Exception as e:
+            logger.error(f"Failed to subscribe to Redis: {e}")
+
+    async def _unsubscribe_from_song(self, song_id: UUID) -> None:
+        """Unsubscribe from Redis channels for a song."""
+        if not self._redis or not self._pubsub:
+            return
+
+        if song_id not in self._subscribed_songs:
+            return
+
+        try:
+            await self._pubsub.unsubscribe(
+                f"yjs:updates:{song_id}",
+                f"yjs:awareness:{song_id}",
+            )
+            self._subscribed_songs.discard(song_id)
+            logger.debug(f"Unsubscribed from Redis channels for song {song_id}")
+        except Exception as e:
+            logger.error(f"Failed to unsubscribe from Redis: {e}")
+
+    async def _publish_update(self, song_id: UUID, update: bytes) -> None:
+        """Publish a sync update to Redis."""
+        if not self._redis:
+            return
+
+        try:
+            await self._redis.publish(f"yjs:updates:{song_id}", update)
+        except Exception as e:
+            logger.error(f"Failed to publish update to Redis: {e}")
+
+    async def _publish_awareness(self, song_id: UUID, message: bytes) -> None:
+        """Publish an awareness message to Redis."""
+        if not self._redis:
+            return
+
+        try:
+            await self._redis.publish(f"yjs:awareness:{song_id}", message)
+        except Exception as e:
+            logger.error(f"Failed to publish awareness to Redis: {e}")
+
+    async def _pubsub_listener(self) -> None:
+        """Background task that listens to Redis pub/sub messages."""
+        if not self._pubsub:
+            return
+
+        logger.info("Starting Redis pub/sub listener")
+
+        while True:
+            try:
+                # Skip if no subscriptions yet
+                if not self._subscribed_songs:
+                    await asyncio.sleep(0.5)
+                    continue
+
+                message = await self._pubsub.get_message(
+                    ignore_subscribe_messages=True,
+                    timeout=1.0,
+                )
+
+                if message is None:
+                    continue
+
+                if message["type"] != "message":
+                    continue
+
+                channel = message["channel"]
+                if isinstance(channel, bytes):
+                    channel = channel.decode("utf-8")
+
+                data = message["data"]
+                if isinstance(data, str):
+                    data = data.encode("utf-8")
+
+                # Parse channel: yjs:{type}:{song_id}
+                parts = channel.split(":")
+                if len(parts) != 3:
+                    continue
+
+                _, msg_type, song_id_str = parts
+
                 try:
-                    await other_client.websocket.send_bytes(full_message)
-                except Exception:
-                    pass  # Client may have disconnected
+                    song_id = UUID(song_id_str)
+                except ValueError:
+                    continue
 
-    async def _broadcast_update(
+                # Only process if we have local clients for this song
+                if song_id not in self._connections:
+                    continue
+
+                # Broadcast to local clients
+                if msg_type == "updates":
+                    # Data is already the properly encoded sync message
+                    await self._broadcast_local(song_id, data, exclude=None)
+
+                    # Also apply to local doc - need to decode the update
+                    doc = self._documents.get(song_id)
+                    if doc and len(data) > 1:
+                        try:
+                            # Decode: varUint(MSG_SYNC) + varUint(MSG_SYNC_UPDATE) + varByteArray(payload)
+                            _, offset = read_var_uint(data, 0)  # MSG_SYNC
+                            msg_subtype, offset = read_var_uint(data, offset)
+                            if msg_subtype == MSG_SYNC_UPDATE:
+                                payload, _ = read_var_byte_array(data, offset)
+                                doc.apply_update(payload)
+                        except Exception as e:
+                            logger.error(f"Failed to apply remote update: {e}")
+
+                elif msg_type == "awareness":
+                    # Data is already the properly encoded awareness message
+                    await self._broadcast_local(song_id, data, exclude=None)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Pub/sub listener error: {e}")
+                await asyncio.sleep(1)
+
+        logger.info("Redis pub/sub listener stopped")
+
+    # ─────────────────────────────────────────────────────────────
+    # BROADCASTING
+    # ─────────────────────────────────────────────────────────────
+
+    async def _broadcast_local(
         self,
         song_id: UUID,
-        update: bytes,
+        message: bytes,
         exclude: Optional[ConnectedClient] = None,
-    ):
-        """Broadcast an update to all connected clients."""
-        message = bytes([MSG_SYNC, MSG_SYNC_UPDATE]) + update
-
+    ) -> None:
+        """Broadcast message to local clients only."""
         for client in self._connections.get(song_id, []):
             if exclude and client.websocket == exclude.websocket:
                 continue
@@ -215,31 +546,35 @@ class YjsProvider:
             except Exception:
                 pass  # Client may have disconnected
 
-    async def _load_document(
-        self, song_id: UUID, store: YjsDocumentStore
-    ) -> Doc:
-        """Load a document from the database or create new."""
-        doc = Doc()
+    # ─────────────────────────────────────────────────────────────
+    # PERSISTENCE
+    # ─────────────────────────────────────────────────────────────
 
-        state_vector, document_state = await store.get_state(song_id)
-        if document_state:
-            try:
-                doc.apply_update(document_state)
-                logger.debug(f"Loaded Yjs document for song {song_id}")
-            except Exception as e:
-                logger.error(f"Error loading Yjs document: {e}")
-                # Return fresh document if load fails
-                doc = Doc()
+    def _schedule_persist(
+        self,
+        song_id: UUID,
+        store: YjsDocumentStore,
+        user_id: UUID,
+    ) -> None:
+        """Schedule debounced persistence."""
+        # Cancel existing task
+        if song_id in self._persist_tasks:
+            self._persist_tasks[song_id].cancel()
 
-        return doc
+        async def do_persist():
+            await asyncio.sleep(self.PERSIST_DEBOUNCE_SECONDS)
+            await self._persist_document_now(song_id, store, user_id)
+            self._persist_tasks.pop(song_id, None)
 
-    async def _persist_document(
+        self._persist_tasks[song_id] = asyncio.create_task(do_persist())
+
+    async def _persist_document_now(
         self,
         song_id: UUID,
         store: YjsDocumentStore,
         user_id: Optional[UUID] = None,
-    ):
-        """Persist document state to the database."""
+    ) -> None:
+        """Persist document to database immediately."""
         doc = self._documents.get(song_id)
         if doc is None:
             return
@@ -254,13 +589,35 @@ class YjsProvider:
                 document_state=document_state,
                 user_id=user_id,
             )
-        except Exception as e:
-            logger.error(f"Error persisting Yjs document: {e}")
 
-    async def send_initial_state(
+            logger.debug(f"Persisted Yjs doc for song {song_id}: {len(document_state)} bytes")
+        except Exception as e:
+            logger.error(f"Failed to persist song {song_id}: {e}")
+
+    async def _load_document(
         self,
-        client: ConnectedClient,
-    ):
+        song_id: UUID,
+        store: YjsDocumentStore,
+    ) -> Doc:
+        """Load document from database or create new."""
+        doc = Doc()
+
+        state_vector, document_state = await store.get_state(song_id)
+        if document_state:
+            try:
+                doc.apply_update(document_state)
+                logger.debug(f"Loaded Yjs doc for song {song_id}")
+            except Exception as e:
+                logger.error(f"Error loading Yjs doc: {e}")
+                doc = Doc()
+
+        return doc
+
+    # ─────────────────────────────────────────────────────────────
+    # INITIAL STATE
+    # ─────────────────────────────────────────────────────────────
+
+    async def send_initial_state(self, client: ConnectedClient) -> None:
         """Send the initial document state to a newly connected client."""
         song_id = client.song_id
         doc = self._documents.get(song_id)
@@ -269,16 +626,38 @@ class YjsProvider:
 
         try:
             # Send sync step 1: our state vector
+            # Format: varUint(MSG_SYNC) + varUint(MSG_SYNC_REQUEST) + varByteArray(state_vector)
             state_vector = doc.get_state()
-            message = bytes([MSG_SYNC, MSG_SYNC_REQUEST]) + state_vector
+            message = (
+                write_var_uint(MSG_SYNC) +
+                write_var_uint(MSG_SYNC_REQUEST) +
+                write_var_byte_array(state_vector)
+            )
             await client.websocket.send_bytes(message)
 
-            # Send full document state
+            # Send sync step 2: full document state
+            # Format: varUint(MSG_SYNC) + varUint(MSG_SYNC_RESPONSE) + varByteArray(document_state)
             document_state = doc.get_update()
-            response = bytes([MSG_SYNC, MSG_SYNC_RESPONSE]) + document_state
+            response = (
+                write_var_uint(MSG_SYNC) +
+                write_var_uint(MSG_SYNC_RESPONSE) +
+                write_var_byte_array(document_state)
+            )
             await client.websocket.send_bytes(response)
         except Exception as e:
             logger.error(f"Error sending initial state: {e}")
+
+    # ─────────────────────────────────────────────────────────────
+    # UTILITIES
+    # ─────────────────────────────────────────────────────────────
+
+    def get_active_song_ids(self) -> list[UUID]:
+        """Get list of songs with active documents in memory."""
+        return list(self._documents.keys())
+
+    def get_connection_count(self, song_id: UUID) -> int:
+        """Get number of connected clients for a song."""
+        return len(self._connections.get(song_id, []))
 
 
 # Global provider instance

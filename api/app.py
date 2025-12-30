@@ -6,6 +6,7 @@ Includes reference library with RAG capabilities for research and inspiration.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -26,6 +27,8 @@ from api.services.library import (
 from api.core.routes.websocket import router as websocket_router
 from api.config import Config
 from api.database import close_database, init_database
+from api.services.yjs_provider import yjs_provider
+from api.jobs.yjs_sync_worker import yjs_sync_worker
 
 
 @asynccontextmanager
@@ -33,8 +36,19 @@ async def lifespan(app: FastAPI):
     """Initialize and cleanup resources."""
     # Startup
     await init_database()
+
+    # Initialize Yjs provider with Redis
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    await yjs_provider.initialize(redis_url)
+
+    # Start Yjs sync worker
+    await yjs_sync_worker.start()
+
     yield
+
     # Shutdown
+    await yjs_sync_worker.stop()
+    await yjs_provider.shutdown()
     await close_database()
 
 

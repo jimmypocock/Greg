@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,6 +56,10 @@ class Song(Base, TimestampMixin):
 
     # Quick notes field
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Yjs real-time editing
+    yjs_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    yjs_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Relationships
     sections: Mapped[list["SongSection"]] = relationship(

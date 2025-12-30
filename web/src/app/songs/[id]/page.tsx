@@ -687,6 +687,11 @@ function SongPageContent({ params }: PageProps) {
                   const apiData = toApiFormat(parsed);
                   saveCanvasMutation.mutate(apiData);
                 }}
+                onDuplicateVersion={handleDuplicateVersion}
+                onSwitchVersion={handleSwitchVersion}
+                onUploadAudio={handleUploadVersionAudio}
+                isUploadingAudio={uploadAudio.isPending}
+                onReorderSections={handleReorderSections}
               />
             </div>
           ) : (

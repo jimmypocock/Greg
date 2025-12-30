@@ -15,6 +15,13 @@ import type {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
 
 /**
+ * Get the stream URL for an audio file.
+ */
+export function getAudioStreamUrl(songId: string, audioId: string): string {
+  return `${API_BASE_URL}/songs/${songId}/audio/${audioId}/stream`;
+}
+
+/**
  * Upload an audio file for a song.
  * Optionally attach to a specific section version.
  */

@@ -19,19 +19,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #111827;
-    --foreground: #f9fafb;
-    --panel-bg: #1f2937;
-    --panel-border: #374151;
-    --section-header-bg: #111827;
-    --text-primary: #f9fafb;
-    --text-secondary: #9ca3af;
-    --accent: #818cf8;
-    --accent-hover: #a5b4fc;
-  }
-}
+/* Dark mode disabled - using light mode only */
 
 body {
   background: var(--background);

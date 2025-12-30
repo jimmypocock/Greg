@@ -35,6 +35,7 @@ from api.jobs.schemas import (
     JobProgressResponse,
     JobResponse,
 )
+from api.jobs.yjs_sync_worker import YjsSyncWorker, yjs_sync_worker
 
 __all__ = [
     # Exceptions
@@ -64,4 +65,7 @@ __all__ = [
     "JobListResponse",
     "JobProgressResponse",
     "JobResponse",
+    # Yjs sync worker
+    "YjsSyncWorker",
+    "yjs_sync_worker",
 ]
