@@ -113,20 +113,31 @@ async def yjs_websocket(
 
         # Connect to Yjs provider
         client = await yjs_provider.connect(websocket, song_id, user.id, store)
+        if client is None:
+            return
 
         try:
-            # Send initial document state
-            await yjs_provider.send_initial_state(client)
+            # Send initial document state (with error handling for early disconnect)
+            try:
+                await yjs_provider.send_initial_state(client)
+                logger.info(f"[YJS] Initial state sent, entering message loop for song={song_id}")
+            except Exception as e:
+                logger.debug(f"Could not send initial state (client may have disconnected): {e}")
+                return
 
             # Handle messages
+            message_count = 0
             while True:
+                logger.debug(f"[YJS] Waiting for message #{message_count + 1} from client...")
                 message = await websocket.receive_bytes()
+                message_count += 1
+                logger.info(f"[YJS] Received message #{message_count}: {len(message)} bytes from user={user.id}")
                 await yjs_provider.handle_message(client, message, store)
 
         except WebSocketDisconnect:
-            logger.debug(f"WebSocket disconnected: song={song_id}, user={user.id}")
+            logger.info(f"[YJS] WebSocket disconnected after {message_count} messages: song={song_id}, user={user.id}")
         except Exception as e:
-            logger.error(f"WebSocket error: {e}")
+            logger.error(f"[YJS] WebSocket error after {message_count} messages: {e}")
         finally:
             await yjs_provider.disconnect(client, store)
 

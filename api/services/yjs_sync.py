@@ -13,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from pycrdt import Doc
+from pycrdt import Doc, Text
 
 from api.database.models import (
     Song,
@@ -77,6 +77,16 @@ class YjsSyncService:
         # Convert to Yjs
         doc = sql_song_to_yjs(song)
 
+        # Check what canvas content was generated - use doc.get() for proper access
+        canvas = doc.get("canvas", type=Text)
+        canvas_content = str(canvas) if canvas else ""
+        print(f"[YJS] Initialized from SQL, canvas: '{canvas_content[:100]}...' ({len(canvas_content)} chars)")
+        print(f"[YJS] Song has {len(song.sections)} sections")
+
+        # Verify doc state before saving
+        test_update = doc.get_update()
+        print(f"[YJS] Doc update size before save: {len(test_update)} bytes")
+
         # Persist initial state
         await self.store.save_state(
             song_id=song_id,
@@ -89,7 +99,7 @@ class YjsSyncService:
         song.yjs_synced_at = datetime.utcnow()
         await self.session.commit()
 
-        logger.info(f"Initialized Yjs doc for song {song_id}")
+        print(f"[YJS] Saved initial state for song {song_id}")
         return doc
 
     async def get_or_initialize_doc(self, song_id: UUID) -> Doc:
@@ -109,10 +119,28 @@ class YjsSyncService:
             # Existing Yjs state
             doc = Doc()
             doc.apply_update(doc_state)
-            logger.debug(f"Loaded existing Yjs doc for song {song_id}")
+            # Check canvas content - use doc.get() for proper access
+            canvas = doc.get("canvas", type=Text)
+            canvas_content = str(canvas) if canvas else ""
+            print(f"[YJS] Loaded existing doc for {song_id}, canvas: '{canvas_content[:100]}...' ({len(canvas_content)} chars)")
+
+            # If canvas is empty but song has sections, reinitialize from SQL
+            if len(canvas_content) == 0:
+                # Check if song has sections in SQL
+                result = await self.session.execute(
+                    select(Song)
+                    .where(Song.id == song_id)
+                    .options(selectinload(Song.sections))
+                )
+                song = result.scalar_one_or_none()
+                if song and song.sections:
+                    print(f"[YJS] Canvas empty but song has {len(song.sections)} sections, reinitializing from SQL")
+                    return await self.initialize_yjs_from_sql(song_id)
+
             return doc
 
         # No Yjs state yet - initialize from SQL
+        print(f"[YJS] No existing state for {song_id}, initializing from SQL")
         return await self.initialize_yjs_from_sql(song_id)
 
     async def sync_yjs_to_sql(self, song_id: UUID) -> None:

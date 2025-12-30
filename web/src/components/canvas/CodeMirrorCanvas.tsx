@@ -11,6 +11,9 @@ import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { EditorView, keymap, ViewUpdate, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import * as Y from 'yjs';
+import { yCollab } from 'y-codemirror.next';
+import { WebsocketProvider } from 'y-websocket';
 import { Song } from '@/types/song';
 import { AudioFile } from '@/types/audio';
 import { chordAnnotations, getChords } from './chordAnnotations';
@@ -36,6 +39,9 @@ interface CodeMirrorCanvasProps {
   song: Song;
   onChange?: (content: string, parsed: ParsedDocument) => void;
   onSave?: (parsed: ParsedDocument) => void;
+  // Yjs collaborative editing (when provided, real-time sync is enabled)
+  yText?: Y.Text | null;
+  provider?: WebsocketProvider | null;
   // Version callbacks (from parent, with auth context)
   onDuplicateVersion?: (sectionId: string, versionId: string) => Promise<void>;
   onSwitchVersion?: (sectionId: string, versionId: string) => Promise<void>;
@@ -58,12 +64,16 @@ export function CodeMirrorCanvas({
   song,
   onChange,
   onSave,
+  yText,
+  provider,
   onDuplicateVersion,
   onSwitchVersion,
   onUploadAudio,
   isUploadingAudio = false,
   onReorderSections,
 }: CodeMirrorCanvasProps) {
+  // Check if Yjs collaborative mode is enabled
+  const isCollaborative = !!(yText && provider);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -331,23 +341,42 @@ export function CodeMirrorCanvas({
 
   // Extensions (memoize to avoid re-creating on every render)
   const extensions = useMemo(
-    () => [
-      history(),
-      backspaceToLyric, // Must come before default keymap
-      keymap.of([...defaultKeymap, ...historyKeymap]),
-      lineTypesField.init(() => initialLineTypes),
-      lineTypeDecorations,
-      sectionControlsDecorations,
-      sectionDragDrop,
-      lineTypeGutter,
-      prefixDetector,
-      baseTheme,
-      EditorView.lineWrapping,
-      chordAnnotations(initialChords),
-      placeholder('Write your next hit...'),
-      EditorView.contentAttributes.of({ 'aria-label': 'Song editor' }),
-    ],
-    [initialChords, initialLineTypes]
+    () => {
+      const baseExtensions = [
+        backspaceToLyric, // Must come before default keymap
+        keymap.of([...defaultKeymap, ...historyKeymap]),
+        lineTypesField.init(() => initialLineTypes),
+        lineTypeDecorations,
+        sectionControlsDecorations,
+        sectionDragDrop,
+        lineTypeGutter,
+        prefixDetector,
+        baseTheme,
+        EditorView.lineWrapping,
+        chordAnnotations(initialChords),
+        placeholder('Write your next hit...'),
+        EditorView.contentAttributes.of({ 'aria-label': 'Song editor' }),
+      ];
+
+      if (isCollaborative && yText && provider) {
+        // Collaborative mode: use yCollab for real-time sync
+        // yCollab handles undo/redo internally
+        // Pass null for awareness to avoid cursor position errors from stale data
+        // TODO: Re-enable awareness once we handle the initial sync timing issue
+        console.log('[CodeMirror] Using collaborative mode with Yjs');
+        return [
+          ...baseExtensions,
+          yCollab(yText, null),
+        ];
+      } else {
+        // Non-collaborative mode: use local history
+        return [
+          history(),
+          ...baseExtensions,
+        ];
+      }
+    },
+    [initialChords, initialLineTypes, isCollaborative, yText, provider]
   );
 
   // Debounce timer for auto-save
@@ -433,8 +462,13 @@ export function CodeMirrorCanvas({
 
       {/* Editor */}
       <CodeMirror
+        // Force remount when switching between collaborative and non-collaborative modes
+        // This prevents cursor position errors from stale awareness data
+        key={isCollaborative ? 'collaborative' : 'local'}
         ref={editorRef}
-        value={initialContent}
+        // In collaborative mode, initialize with Y.Text content, then yCollab handles updates
+        // In non-collaborative mode, use the initial content from the song
+        value={isCollaborative ? yText.toString() : initialContent}
         extensions={extensions}
         onChange={handleChange}
         placeholder="Start writing your song...
@@ -466,14 +500,21 @@ Add chord progressions with >"
       {/* Footer hints */}
       <div className="mt-2 text-xs text-gray-400 dark:text-gray-500 px-2 flex items-center justify-between">
         <span>Type prefix to set type · Click gutter to change type</span>
-        <span
-          className={`transition-opacity duration-300 ${
-            saveStatus === 'idle' ? 'opacity-0' : 'opacity-100'
-          }`}
-        >
-          {saveStatus === 'saving' && '⏳ Saving...'}
-          {saveStatus === 'saved' && '✓ Saved'}
-        </span>
+        {isCollaborative ? (
+          <span className="text-green-500 flex items-center gap-1">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            Live
+          </span>
+        ) : (
+          <span
+            className={`transition-opacity duration-300 ${
+              saveStatus === 'idle' ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            {saveStatus === 'saving' && '⏳ Saving...'}
+            {saveStatus === 'saved' && '✓ Saved'}
+          </span>
+        )}
       </div>
 
       {/* Hidden audio file input */}

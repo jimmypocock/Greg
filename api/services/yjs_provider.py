@@ -25,9 +25,10 @@ from api.services.yjs_store import YjsDocumentStore
 
 # Import pycrdt - handle potential import issues
 try:
-    from pycrdt import Doc
+    from pycrdt import Doc, Text
 except ImportError:
     Doc = None
+    Text = None
     logging.warning("pycrdt not available - Yjs features disabled")
 
 logger = logging.getLogger(__name__)
@@ -218,10 +219,22 @@ class YjsProvider:
         async with self._lock:
             self._connections[song_id].append(client)
 
-            # Load document if not in memory
-            if song_id not in self._documents:
+            # Load document if not in memory, or reload if current one has empty canvas
+            doc = self._documents.get(song_id)
+            if doc is None:
                 doc = await self._load_document(song_id, store)
                 self._documents[song_id] = doc
+            else:
+                # Check if cached doc has empty canvas - if so, reload from DB
+                # (may have been reinitialized by sync_service)
+                canvas = doc.get("canvas", type=Text) if Text else None
+                canvas_len = len(str(canvas)) if canvas else 0
+                if canvas_len == 0:
+                    print(f"[YJS] Reloading doc for {song_id} - in-memory canvas is empty")
+                    doc = await self._load_document(song_id, store)
+                    self._documents[song_id] = doc
+                else:
+                    print(f"[YJS] Using cached doc for {song_id}, canvas: {canvas_len} chars")
 
             # Update access time
             self._doc_last_access[song_id] = asyncio.get_event_loop().time()
@@ -292,11 +305,14 @@ class YjsProvider:
     ) -> None:
         """Handle an incoming WebSocket message."""
         if len(message) < 1:
+            logger.warning(f"[YJS] Received empty message from client")
             return
 
         # Decode message type using varUint
         msg_type, offset = read_var_uint(message, 0)
         song_id = client.song_id
+
+        print(f"[YJS] Received message: type={msg_type}, size={len(message)} bytes, song={song_id}")
 
         # Update last access time
         self._doc_last_access[song_id] = asyncio.get_event_loop().time()
@@ -305,6 +321,8 @@ class YjsProvider:
             await self._handle_sync_message(client, message[offset:], store)
         elif msg_type == MSG_AWARENESS:
             await self._handle_awareness_message(client, message[offset:])
+        else:
+            logger.warning(f"[YJS] Unknown message type: {msg_type}")
 
     async def _handle_sync_message(
         self,
@@ -329,30 +347,74 @@ class YjsProvider:
             return
 
         if msg_subtype == MSG_SYNC_REQUEST:
-            # Client requesting sync - send full document state
+            # Client requesting sync - they sent their state vector
+            # We respond with updates they're missing
             try:
-                full_state = doc.get_update()
+                # The payload is the client's state vector
+                client_state_vector = payload
+                print(f"[YJS] Sync request from client with state vector of {len(client_state_vector)} bytes")
+
+                # Get updates the client is missing based on their state vector
+                # For pycrdt: get_update(state_vector) returns updates since that state
+                if client_state_vector and len(client_state_vector) > 0:
+                    try:
+                        missing_updates = doc.get_update(client_state_vector)
+                    except Exception as e:
+                        logger.warning(f"[YJS] Could not compute diff, sending full state: {e}")
+                        missing_updates = doc.get_update()
+                else:
+                    # No state vector means client is new - send everything
+                    missing_updates = doc.get_update()
+
+                canvas = doc.get("canvas", type=Text) if Text else None
+                canvas_len = len(str(canvas)) if canvas else 0
+                print(f"[YJS] Sending sync response: {len(missing_updates)} bytes, canvas: {canvas_len} chars")
+
                 response = (
                     write_var_uint(MSG_SYNC) +
                     write_var_uint(MSG_SYNC_RESPONSE) +
-                    write_var_byte_array(full_state)
+                    write_var_byte_array(missing_updates)
                 )
                 await client.websocket.send_bytes(response)
+
+                # Also send our state vector so client can send us any updates we're missing
+                our_state_vector = doc.get_state()
+                request = (
+                    write_var_uint(MSG_SYNC) +
+                    write_var_uint(MSG_SYNC_REQUEST) +
+                    write_var_byte_array(our_state_vector)
+                )
+                await client.websocket.send_bytes(request)
+                print(f"[YJS] Sent our state vector ({len(our_state_vector)} bytes) to client")
+
             except Exception as e:
-                logger.error(f"Error handling sync request: {e}")
+                logger.error(f"Error handling sync request: {e}", exc_info=True)
 
         elif msg_subtype == MSG_SYNC_RESPONSE:
             # Received state from client - apply update
             try:
                 doc.apply_update(payload)
+                canvas = doc.get("canvas", type=Text) if Text else None
+                canvas_len = len(str(canvas)) if canvas else 0
+                print(f"[YJS] Sync response from client, applied {len(payload)} bytes, canvas now: {canvas_len} chars")
                 self._schedule_persist(song_id, store, client.user_id)
             except Exception as e:
-                logger.error(f"Error applying sync response: {e}")
+                print(f"[YJS] Error applying sync response: {e}")
 
         elif msg_subtype == MSG_SYNC_UPDATE:
             # Client sent an update - apply and broadcast
             try:
+                # Log before apply
+                canvas_before = doc.get("canvas", type=Text) if Text else None
+                canvas_len_before = len(str(canvas_before)) if canvas_before else 0
+
                 doc.apply_update(payload)
+
+                # Check canvas after update
+                canvas = doc.get("canvas", type=Text) if Text else None
+                canvas_len = len(str(canvas)) if canvas else 0
+                canvas_preview = str(canvas)[:100] if canvas else ""
+                print(f"[YJS] Applied sync update: canvas {canvas_len_before} -> {canvas_len} chars, payload: {len(payload)} bytes")
 
                 # Broadcast to local clients (re-encode the message properly)
                 broadcast_msg = (
@@ -367,9 +429,10 @@ class YjsProvider:
 
                 # Schedule debounced persist
                 self._schedule_persist(song_id, store, client.user_id)
+                logger.debug(f"[YJS] Scheduled persist for song {song_id}")
 
             except Exception as e:
-                logger.error(f"Error handling sync update: {e}")
+                logger.error(f"Error handling sync update: {e}", exc_info=True)
 
     async def _handle_awareness_message(
         self,
@@ -577,9 +640,15 @@ class YjsProvider:
         """Persist document to database immediately."""
         doc = self._documents.get(song_id)
         if doc is None:
+            logger.warning(f"Cannot persist song {song_id}: doc not in memory")
             return
 
         try:
+            # Check canvas content before persisting
+            canvas = doc.get("canvas", type=Text) if Text else None
+            canvas_len = len(str(canvas)) if canvas else 0
+            print(f"[YJS] Persisting song {song_id}, canvas length: {canvas_len}")
+
             state_vector = doc.get_state()
             document_state = doc.get_update()
 
@@ -590,7 +659,7 @@ class YjsProvider:
                 user_id=user_id,
             )
 
-            logger.debug(f"Persisted Yjs doc for song {song_id}: {len(document_state)} bytes")
+            logger.info(f"Persisted Yjs doc for song {song_id}: {len(document_state)} bytes")
         except Exception as e:
             logger.error(f"Failed to persist song {song_id}: {e}")
 
@@ -606,10 +675,17 @@ class YjsProvider:
         if document_state:
             try:
                 doc.apply_update(document_state)
-                logger.debug(f"Loaded Yjs doc for song {song_id}")
+                # Check canvas content after loading - use doc.get() for proper access
+                canvas = doc.get("canvas", type=Text) if Text else None
+                canvas_len = len(str(canvas)) if canvas else 0
+                canvas_preview = str(canvas)[:50] if canvas else ""
+                print(f"[YJS] Provider loaded doc for {song_id}, canvas: {canvas_len} chars, state: {len(document_state)} bytes")
+                print(f"[YJS] Canvas preview: {canvas_preview!r}")
             except Exception as e:
-                logger.error(f"Error loading Yjs doc: {e}")
+                print(f"[YJS] Error loading Yjs doc: {e}")
                 doc = Doc()
+        else:
+            print(f"[YJS] No document state found for song {song_id} in store")
 
         return doc
 
@@ -618,34 +694,21 @@ class YjsProvider:
     # ─────────────────────────────────────────────────────────────
 
     async def send_initial_state(self, client: ConnectedClient) -> None:
-        """Send the initial document state to a newly connected client."""
+        """Send the initial document state to a newly connected client.
+
+        Note: We DON'T send anything here anymore. Instead, we wait for the
+        client to initiate the sync protocol by sending MSG_SYNC_REQUEST.
+        The y-websocket library expects to initiate the handshake.
+        """
         song_id = client.song_id
         doc = self._documents.get(song_id)
         if doc is None:
+            print(f"[YJS] No document found for song {song_id} when preparing initial state")
             return
 
-        try:
-            # Send sync step 1: our state vector
-            # Format: varUint(MSG_SYNC) + varUint(MSG_SYNC_REQUEST) + varByteArray(state_vector)
-            state_vector = doc.get_state()
-            message = (
-                write_var_uint(MSG_SYNC) +
-                write_var_uint(MSG_SYNC_REQUEST) +
-                write_var_byte_array(state_vector)
-            )
-            await client.websocket.send_bytes(message)
-
-            # Send sync step 2: full document state
-            # Format: varUint(MSG_SYNC) + varUint(MSG_SYNC_RESPONSE) + varByteArray(document_state)
-            document_state = doc.get_update()
-            response = (
-                write_var_uint(MSG_SYNC) +
-                write_var_uint(MSG_SYNC_RESPONSE) +
-                write_var_byte_array(document_state)
-            )
-            await client.websocket.send_bytes(response)
-        except Exception as e:
-            logger.error(f"Error sending initial state: {e}")
+        canvas = doc.get("canvas", type=Text) if Text else None
+        canvas_len = len(str(canvas)) if canvas else 0
+        print(f"[YJS] Client connected, waiting for sync request. Song={song_id}, canvas={canvas_len} chars")
 
     # ─────────────────────────────────────────────────────────────
     # UTILITIES

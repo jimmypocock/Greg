@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * Yjs Song Hook
+ * Yjs Canvas Hook
  *
- * Manages a Yjs WebSocket connection for real-time collaborative editing
- * of a song document. Provides connection status and the Yjs document.
+ * Provides Yjs Y.Text binding for CodeMirror collaborative editing.
+ * Uses the 'canvas' field from the Yjs document for real-time text sync.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -23,13 +23,17 @@ function getWebSocketUrl(): string {
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-export interface YjsSongState {
+export interface YjsCanvasState {
+  /** The Y.Text for the canvas content */
+  yText: Y.Text | null;
   /** The Yjs document */
   doc: Y.Doc | null;
-  /** WebSocket provider */
+  /** WebSocket provider (for awareness) */
   provider: WebsocketProvider | null;
   /** Connection status */
   status: ConnectionStatus;
+  /** Whether the document has synced with the server */
+  isSynced: boolean;
   /** Error message if status is 'error' */
   error: string | null;
   /** Number of connected users (including self) */
@@ -40,43 +44,44 @@ export interface YjsSongState {
   disconnect: () => void;
 }
 
-export interface UseYjsSongOptions {
+export interface UseYjsCanvasOptions {
   /** Song ID to connect to */
   songId: string;
   /** Whether to auto-connect (default: true) */
   autoConnect?: boolean;
   /** Callback when document syncs */
-  onSync?: (doc: Y.Doc) => void;
+  onSync?: (yText: Y.Text, doc: Y.Doc) => void;
   /** Callback when connection status changes */
   onStatusChange?: (status: ConnectionStatus) => void;
 }
 
 /**
- * Hook for managing a Yjs WebSocket connection to a song document.
+ * Hook for managing Yjs collaborative editing for the canvas.
  *
  * @example
  * ```tsx
- * const { doc, status, connectedUsers } = useYjsSong({
+ * const { yText, provider, status } = useYjsCanvas({
  *   songId: song.id,
- *   onSync: (doc) => console.log('Document synced'),
+ *   onSync: (yText) => console.log('Canvas synced'),
  * });
  *
- * if (status === 'connected' && doc) {
- *   const meta = doc.getMap('meta');
- *   const sections = doc.getArray('sections');
+ * if (status === 'connected' && yText && provider) {
+ *   // Use yCollab(yText, provider.awareness) in CodeMirror
  * }
  * ```
  */
-export function useYjsSong({
+export function useYjsCanvas({
   songId,
   autoConnect = true,
   onSync,
   onStatusChange,
-}: UseYjsSongOptions): YjsSongState {
+}: UseYjsCanvasOptions): YjsCanvasState {
   const { accessToken, isAuthenticated } = useAuth();
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
+  const [isSynced, setIsSynced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectedUsers, setConnectedUsers] = useState(0);
+  const [yText, setYText] = useState<Y.Text | null>(null);
 
   const docRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
@@ -109,17 +114,17 @@ export function useYjsSong({
 
     updateStatus('connecting');
     setError(null);
+    setIsSynced(false);
 
     // Create new Yjs document
     const doc = new Y.Doc();
     docRef.current = doc;
 
+    // Get the canvas Y.Text reference (but don't expose until synced)
+    const canvasText = doc.getText('canvas');
+
     // Build WebSocket URL with token
     const wsUrl = getWebSocketUrl();
-    // y-websocket appends roomName to serverUrl, so we structure it as:
-    // serverUrl = ws://host/ws/songs
-    // roomName = {songId}/yjs
-    // Result: ws://host/ws/songs/{songId}/yjs
     const roomName = `${songId}/yjs`;
 
     try {
@@ -140,6 +145,11 @@ export function useYjsSong({
       provider.on('status', (event: { status: string }) => {
         if (!mountedRef.current) return;
 
+        console.log('[YjsCanvas] WebSocket status:', event.status, {
+          wsconnected: provider.wsconnected,
+          synced: provider.synced,
+        });
+
         if (event.status === 'connected') {
           updateStatus('connected');
         } else if (event.status === 'disconnected') {
@@ -147,13 +157,29 @@ export function useYjsSong({
         }
       });
 
-      // Handle sync
+      // Handle sync - only expose yText after sync to avoid cursor position errors
       provider.on('sync', (synced: boolean) => {
         if (!mountedRef.current) return;
 
+        console.log('[YjsCanvas] Sync event:', synced, 'canvasText.length:', canvasText.length);
+        console.log('[YjsCanvas] Canvas content:', JSON.stringify(canvasText.toString().substring(0, 200)));
+
         if (synced) {
-          onSync?.(doc);
+          // Now expose yText - CodeMirror will remount with fresh state via key prop
+          setYText(canvasText);
+          setIsSynced(true);
+          onSync?.(canvasText, doc);
         }
+      });
+
+      // Log Y.Doc updates to see if changes are being tracked
+      doc.on('update', (update: Uint8Array, origin: unknown) => {
+        console.log('[YjsCanvas] Doc update:', {
+          updateSize: update.length,
+          origin: origin === provider ? 'remote' : origin === null ? 'local' : 'other',
+          canvasLength: canvasText.length,
+          wsConnected: provider.wsconnected,
+        });
       });
 
       // Handle awareness (connected users)
@@ -178,7 +204,6 @@ export function useYjsSong({
         if (!mountedRef.current) return;
 
         if (event?.code === 1008) {
-          // Policy violation - likely auth failure
           setError('Authentication failed');
           updateStatus('error');
         }
@@ -200,6 +225,7 @@ export function useYjsSong({
       docRef.current.destroy();
       docRef.current = null;
     }
+    setYText(null);
     updateStatus('disconnected');
   }, [updateStatus]);
 
@@ -223,14 +249,12 @@ export function useYjsSong({
     };
   }, [autoConnect, songId, accessToken, isAuthenticated, connect, disconnect]);
 
-  // Debug: log when doc changes
-  const currentDoc = docRef.current;
-  console.log('[useYjsSong] Returning doc:', currentDoc ? 'Doc exists' : 'null', 'status:', status);
-
   return {
-    doc: currentDoc,
+    yText,
+    doc: docRef.current,
     provider: providerRef.current,
     status,
+    isSynced,
     error,
     connectedUsers,
     reconnect,

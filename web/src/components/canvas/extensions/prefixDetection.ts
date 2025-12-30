@@ -93,10 +93,24 @@ export const prefixDetector = EditorView.updateListener.of((update) => {
   if (effects.length > 0 || changes.length > 0) {
     // Use setTimeout to avoid dispatching during an update
     setTimeout(() => {
-      update.view.dispatch({
-        changes: changes.length > 0 ? changes : undefined,
-        effects,
-      });
+      try {
+        // Validate changes are still valid (document may have changed due to Yjs sync)
+        const currentDocLength = update.view.state.doc.length;
+        const validChanges = changes.filter(
+          (change) => change.from >= 0 && change.to <= currentDocLength
+        );
+
+        // Only dispatch if we have valid operations
+        if (validChanges.length > 0 || effects.length > 0) {
+          update.view.dispatch({
+            changes: validChanges.length > 0 ? validChanges : undefined,
+            effects,
+          });
+        }
+      } catch (e) {
+        // Silently ignore errors - this can happen during Yjs sync when document changes rapidly
+        console.debug('[prefixDetector] Skipped stale dispatch:', e);
+      }
     }, 0);
   }
 });

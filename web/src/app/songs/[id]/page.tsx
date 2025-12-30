@@ -3,7 +3,9 @@
 import { use, useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSong, useUpdateSong, useDeleteSong, useSuggestStructure, useApplyStructure, useUpdateLine, useAddLine, useAddSection, useUpdateSection, useReorderSections, useDeleteLine, useDeleteSection, useReorderLines, useAddChord, useRemoveChord, useSaveCanvas, songKeys } from '@/hooks/queries/songs';
+import { useSong, useDeleteSong, useSuggestStructure, useApplyStructure, useSaveCanvas, songKeys } from '@/hooks/queries/songs';
+import { useYjsSongData } from '@/hooks/useYjsSongData';
+import { useYjsCanvas } from '@/hooks/useYjsCanvas';
 import { duplicateVersion, promoteVersion } from '@/lib/versions';
 import { useUploadAudio } from '@/hooks/queries/audio';
 import { useQueryClient } from '@tanstack/react-query';
@@ -33,24 +35,58 @@ export default function SongPage({ params }: PageProps) {
 function SongPageContent({ params }: PageProps) {
   const resolvedParams = use(params);
   const router = useRouter();
-  const { data: song, isLoading, error } = useSong(resolvedParams.id);
-  const updateSong = useUpdateSong(resolvedParams.id);
-  const deleteSong = useDeleteSong();
+  const queryClient = useQueryClient();
+
+  // Editor mode - defined early so hooks can use it
+  const [editorMode, setEditorMode] = useState<'sections' | 'canvas'>('canvas');
+
+  // REST API for initial load and features not yet on Yjs
+  const { data: initialSong, isLoading: restLoading, error: restError } = useSong(resolvedParams.id);
+  const deleteSongMutation = useDeleteSong();
   const suggestStructure = useSuggestStructure(resolvedParams.id);
   const applyStructure = useApplyStructure(resolvedParams.id);
-  const updateLine = useUpdateLine(resolvedParams.id);
-  const addLine = useAddLine(resolvedParams.id);
-  const addSection = useAddSection(resolvedParams.id);
-  const updateSectionMutation = useUpdateSection(resolvedParams.id);
-  const reorderSections = useReorderSections(resolvedParams.id);
-  const deleteLine = useDeleteLine(resolvedParams.id);
-  const deleteSectionMutation = useDeleteSection(resolvedParams.id);
-  const reorderLines = useReorderLines(resolvedParams.id);
   const uploadAudio = useUploadAudio(resolvedParams.id);
-  const addChord = useAddChord(resolvedParams.id);
-  const removeChord = useRemoveChord(resolvedParams.id);
   const saveCanvasMutation = useSaveCanvas(resolvedParams.id);
-  const queryClient = useQueryClient();
+
+  // Yjs for real-time collaborative editing (sections view)
+  // Only connect when in sections mode to avoid conflicting connections
+  const {
+    song,
+    isLoading: yjsLoading,
+    status: yjsStatus,
+    connectedUsers,
+    updateLine: yjsUpdateLine,
+    addLine: yjsAddLine,
+    deleteLine: yjsDeleteLine,
+    addSection: yjsAddSection,
+    deleteSection: yjsDeleteSection,
+    updateSection: yjsUpdateSection,
+    updateMeta: yjsUpdateMeta,
+    addChord: yjsAddChord,
+    removeChord: yjsRemoveChord,
+    reorderSections: yjsReorderSections,
+    reorderLines: yjsReorderLines,
+  } = useYjsSongData({
+    songId: resolvedParams.id,
+    initialSong: initialSong || null,
+    autoConnect: editorMode === 'sections',
+  });
+
+  // Yjs for canvas (real-time text editing)
+  // Only connect when in canvas mode
+  const {
+    yText,
+    provider: canvasProvider,
+    status: canvasStatus,
+    isSynced: canvasSynced,
+    connectedUsers: canvasConnectedUsers,
+  } = useYjsCanvas({
+    songId: resolvedParams.id,
+    autoConnect: editorMode === 'canvas',
+  });
+
+  const isLoading = restLoading || (editorMode === 'sections' && yjsLoading);
+  const error = restError;
 
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -59,7 +95,10 @@ function SongPageContent({ params }: PageProps) {
   const [focusLineId, setFocusLineId] = useState<string | null>(null);
   const [focusCursorPosition, setFocusCursorPosition] = useState<number>(0);
   const [showChords, setShowChords] = useState(true);
-  const [editorMode, setEditorMode] = useState<'sections' | 'canvas'>('sections');
+
+  // Use canvas connection status when in canvas mode
+  const effectiveStatus = editorMode === 'canvas' ? canvasStatus : yjsStatus;
+  const effectiveConnectedUsers = editorMode === 'canvas' ? canvasConnectedUsers : connectedUsers;
 
   // Undo/Redo support
   const { pushAction, undo, redo, canUndo, canRedo, isPerformingAction } = useUndoRedo();
@@ -98,116 +137,97 @@ function SongPageContent({ params }: PageProps) {
   }, [uploadAudio]);
 
   // Add chord to a line
-  const handleAddChord = useCallback(async (sectionId: string, lineId: string, chord: string, position: number) => {
-    await addChord.mutateAsync({ section_id: sectionId, line_id: lineId, chord, position });
-  }, [addChord]);
+  const handleAddChord = useCallback((sectionId: string, lineId: string, chord: string, position: number) => {
+    yjsAddChord(sectionId, lineId, chord, position);
+  }, [yjsAddChord]);
 
   // Remove chord from a line
-  const handleRemoveChord = useCallback(async (sectionId: string, lineId: string, position: number) => {
-    await removeChord.mutateAsync({ section_id: sectionId, line_id: lineId, position });
-  }, [removeChord]);
+  const handleRemoveChord = useCallback((sectionId: string, lineId: string, position: number) => {
+    yjsRemoveChord(sectionId, lineId, position);
+  }, [yjsRemoveChord]);
 
-  const handleUpdateSong = async (data: Parameters<typeof updateSong.mutateAsync>[0]) => {
-    await updateSong.mutateAsync(data);
+  const handleUpdateSong = async (data: { title?: string; key?: string; tempo?: number; time_signature?: string; status?: SongStatus; notes?: string }) => {
+    yjsUpdateMeta(data);
   };
 
-  const handleUpdateLine = useCallback(async (sectionId: string, lineId: string, text: string) => {
+  const handleUpdateLine = useCallback((sectionId: string, lineId: string, text: string) => {
     // Find the current line text for undo
     const section = song?.sections.find(s => s.id === sectionId);
     const line = section?.lines.find(l => l.id === lineId);
     const previousText = line?.text || '';
 
-    await updateLine.mutateAsync({ section_id: sectionId, line_id: lineId, text });
+    yjsUpdateLine(sectionId, lineId, text);
 
     // Only push to undo if text actually changed
     if (previousText !== text) {
       pushAction({
         description: 'Edit line',
         undo: async () => {
-          await updateLine.mutateAsync({ section_id: sectionId, line_id: lineId, text: previousText });
+          yjsUpdateLine(sectionId, lineId, previousText);
         },
         redo: async () => {
-          await updateLine.mutateAsync({ section_id: sectionId, line_id: lineId, text });
+          yjsUpdateLine(sectionId, lineId, text);
         },
       });
     }
-  }, [song, updateLine, pushAction]);
+  }, [song, yjsUpdateLine, pushAction]);
 
-  const handleAddLine = useCallback(async (sectionId: string) => {
-    const result = await addLine.mutateAsync({ section_id: sectionId, text: '' });
+  const handleAddLine = useCallback((sectionId: string) => {
+    const newLineId = yjsAddLine(sectionId, '');
 
-    // Find the newly added line (it should be the last one in the section)
-    const section = result.sections.find(s => s.id === sectionId);
-    const newLine = section?.lines[section.lines.length - 1];
-
-    if (newLine) {
+    if (newLineId) {
       pushAction({
         description: 'Add line',
         undo: async () => {
-          await deleteLine.mutateAsync({ section_id: sectionId, line_id: newLine.id });
+          yjsDeleteLine(sectionId, newLineId);
         },
         redo: async () => {
-          await addLine.mutateAsync({ section_id: sectionId, text: '' });
+          yjsAddLine(sectionId, '');
         },
       });
     }
-  }, [addLine, deleteLine, pushAction]);
+  }, [yjsAddLine, yjsDeleteLine, pushAction]);
 
-  const handleAddLineWithText = useCallback(async (sectionId: string, text: string) => {
-    const result = await addLine.mutateAsync({ section_id: sectionId, text });
+  const handleAddLineWithText = useCallback((sectionId: string, text: string) => {
+    const newLineId = yjsAddLine(sectionId, text);
 
-    // Find the newly added line (it should be the last one in the section)
-    const section = result.sections.find(s => s.id === sectionId);
-    const newLine = section?.lines[section.lines.length - 1];
-
-    if (newLine) {
+    if (newLineId) {
       pushAction({
         description: 'Add line',
         undo: async () => {
-          await deleteLine.mutateAsync({ section_id: sectionId, line_id: newLine.id });
+          yjsDeleteLine(sectionId, newLineId);
         },
         redo: async () => {
-          await addLine.mutateAsync({ section_id: sectionId, text });
+          yjsAddLine(sectionId, text);
         },
       });
     }
-  }, [addLine, deleteLine, pushAction]);
+  }, [yjsAddLine, yjsDeleteLine, pushAction]);
 
   // Add line after a specific line (for Enter key handling)
   const handleAddLineAfter = useCallback(async (sectionId: string, afterLineId: string, text: string): Promise<string | undefined> => {
-    const result = await addLine.mutateAsync({
-      section_id: sectionId,
-      text,
-      after_line_id: afterLineId,
-    });
+    const newLineId = yjsAddLine(sectionId, text, afterLineId);
 
-    // Find the newly added line (it should be right after afterLineId)
-    const section = result.sections.find(s => s.id === sectionId);
-    if (!section) return undefined;
-
-    const afterLineIndex = section.lines.findIndex(l => l.id === afterLineId);
-    const newLine = section.lines[afterLineIndex + 1];
-
-    if (newLine) {
+    if (newLineId) {
       // Set focus to the new line at position 0
-      setFocusLineId(newLine.id);
+      setFocusLineId(newLineId);
       setFocusCursorPosition(0);
 
       pushAction({
         description: 'Add line',
         undo: async () => {
-          await deleteLine.mutateAsync({ section_id: sectionId, line_id: newLine.id });
+          yjsDeleteLine(sectionId, newLineId);
         },
         redo: async () => {
-          await addLine.mutateAsync({ section_id: sectionId, text, after_line_id: afterLineId });
+          yjsAddLine(sectionId, text, afterLineId);
         },
       });
 
-      return newLine.id;
+      return newLineId;
     }
 
     return undefined;
-  }, [addLine, deleteLine, pushAction]);
+  }, [yjsAddLine, yjsDeleteLine, pushAction]);
 
   // Clear focus after it's been handled
   const handleFocusHandled = useCallback(() => {
@@ -243,9 +263,9 @@ function SongPageContent({ params }: PageProps) {
     const cursorPosition = previousText.length;
 
     // Update the previous line with merged text
-    await updateLine.mutateAsync({ section_id: sectionId, line_id: previousLine.id, text: mergedText });
+    yjsUpdateLine(sectionId, previousLine.id, mergedText);
     // Delete the current line
-    await deleteLine.mutateAsync({ section_id: sectionId, line_id: lineId });
+    yjsDeleteLine(sectionId, lineId);
 
     // Set focus to the previous line at the merge point
     setFocusLineId(previousLine.id);
@@ -254,8 +274,8 @@ function SongPageContent({ params }: PageProps) {
     pushAction({
       description: 'Merge lines',
       undo: async () => {
-        await updateLine.mutateAsync({ section_id: sectionId, line_id: previousLine.id, text: previousText });
-        await addLine.mutateAsync({ section_id: sectionId, text: currentText, after_line_id: previousLine.id });
+        yjsUpdateLine(sectionId, previousLine.id, previousText);
+        yjsAddLine(sectionId, currentText, previousLine.id);
       },
       redo: async () => {
         // Use songRef.current to get the latest state (avoids stale closure)
@@ -264,166 +284,137 @@ function SongPageContent({ params }: PageProps) {
         if (restoredLineIndex !== undefined && restoredLineIndex >= 0 && currentSection) {
           const nextLine = currentSection.lines[restoredLineIndex + 1];
           if (nextLine) {
-            await updateLine.mutateAsync({ section_id: sectionId, line_id: previousLine.id, text: mergedText });
-            await deleteLine.mutateAsync({ section_id: sectionId, line_id: nextLine.id });
+            yjsUpdateLine(sectionId, previousLine.id, mergedText);
+            yjsDeleteLine(sectionId, nextLine.id);
           }
         }
       },
     });
 
     return { focusLineId: previousLine.id, cursorPosition };
-  }, [song, updateLine, deleteLine, addLine, pushAction]);
+  }, [song, yjsUpdateLine, yjsDeleteLine, yjsAddLine, pushAction]);
 
   // Add a new section after a specific section
   const handleAddSectionAfter = useCallback(async (afterSectionId: string): Promise<string | undefined> => {
-    // Find the current position of afterSectionId
-    const afterIndex = song?.sections.findIndex(s => s.id === afterSectionId) ?? -1;
+    const newSectionId = yjsAddSection(SectionType.VERSE, afterSectionId);
 
-    const result = await addSection.mutateAsync({
-      type: SectionType.VERSE,
-      after_section_id: afterSectionId,
-    });
-
-    // Find the newly added section (it should be at afterIndex + 1)
-    const newSection = afterIndex >= 0 && afterIndex + 1 < result.sections.length
-      ? result.sections[afterIndex + 1]
-      : result.sections[result.sections.length - 1];
-
-    if (newSection) {
+    if (newSectionId) {
       // Select the new section
-      setSelectedSectionId(newSection.id);
+      setSelectedSectionId(newSectionId);
 
-      // Set focus to the first line of the new section
-      const firstLine = newSection.lines[0];
-      if (firstLine) {
-        setFocusLineId(firstLine.id);
-        setFocusCursorPosition(0);
-      }
+      // Note: Focus will be handled when the section renders with its first line
+      // We need to wait for the Yjs update to propagate
 
       pushAction({
         description: 'Add section',
         undo: async () => {
-          await deleteSectionMutation.mutateAsync(newSection.id);
+          yjsDeleteSection(newSectionId);
         },
         redo: async () => {
-          await addSection.mutateAsync({ type: SectionType.VERSE, after_section_id: afterSectionId });
+          yjsAddSection(SectionType.VERSE, afterSectionId);
         },
       });
 
-      return newSection.id;
+      return newSectionId;
     }
 
     return undefined;
-  }, [song, addSection, deleteSectionMutation, pushAction]);
+  }, [yjsAddSection, yjsDeleteSection, pushAction]);
 
   // Add a new section (uses selected section if available, otherwise adds at end)
-  const handleAddSection = useCallback(async () => {
+  const handleAddSection = useCallback(() => {
     // If a section is selected, add after it
     const afterSectionId = selectedSectionId;
 
-    const result = await addSection.mutateAsync({
-      type: SectionType.VERSE,
-      after_section_id: afterSectionId || undefined,
-    });
+    const newSectionId = yjsAddSection(SectionType.VERSE, afterSectionId || undefined);
 
-    // Find the newly added section
-    let newSection;
-    if (afterSectionId) {
-      const afterIndex = result.sections.findIndex(s => s.id === afterSectionId);
-      newSection = afterIndex >= 0 && afterIndex + 1 < result.sections.length
-        ? result.sections[afterIndex + 1]
-        : result.sections[result.sections.length - 1];
-    } else {
-      newSection = result.sections[result.sections.length - 1];
-    }
-
-    if (newSection) {
+    if (newSectionId) {
       // Select the new section
-      setSelectedSectionId(newSection.id);
-
-      // Set focus to the first line
-      const firstLine = newSection.lines[0];
-      if (firstLine) {
-        setFocusLineId(firstLine.id);
-        setFocusCursorPosition(0);
-      }
+      setSelectedSectionId(newSectionId);
 
       pushAction({
         description: 'Add section',
         undo: async () => {
-          await deleteSectionMutation.mutateAsync(newSection.id);
+          yjsDeleteSection(newSectionId);
         },
         redo: async () => {
-          await addSection.mutateAsync({ type: SectionType.VERSE, after_section_id: afterSectionId || undefined });
+          yjsAddSection(SectionType.VERSE, afterSectionId || undefined);
         },
       });
     }
-  }, [selectedSectionId, addSection, deleteSectionMutation, pushAction]);
+  }, [selectedSectionId, yjsAddSection, yjsDeleteSection, pushAction]);
 
-  const handleUpdateSection = useCallback(async (sectionId: string, type: SectionType) => {
+  const handleUpdateSection = useCallback((sectionId: string, type: SectionType) => {
     // Find the current section type for undo
     const section = song?.sections.find(s => s.id === sectionId);
     const previousType = section?.type || SectionType.VERSE;
 
-    await updateSectionMutation.mutateAsync({ sectionId, type });
+    yjsUpdateSection(sectionId, type);
 
     if (previousType !== type) {
       pushAction({
         description: 'Rename section',
         undo: async () => {
-          await updateSectionMutation.mutateAsync({ sectionId, type: previousType });
+          yjsUpdateSection(sectionId, previousType);
         },
         redo: async () => {
-          await updateSectionMutation.mutateAsync({ sectionId, type });
+          yjsUpdateSection(sectionId, type);
         },
       });
     }
-  }, [song, updateSectionMutation, pushAction]);
+  }, [song, yjsUpdateSection, pushAction]);
 
   const handleReorderSections = useCallback(async (sectionIds: string[]) => {
     // Store the previous order for undo
     const previousOrder = song?.sections.map(s => s.id) || [];
 
-    await reorderSections.mutateAsync({ section_ids: sectionIds });
+    yjsReorderSections(sectionIds);
 
     pushAction({
       description: 'Reorder sections',
       undo: async () => {
-        await reorderSections.mutateAsync({ section_ids: previousOrder });
+        yjsReorderSections(previousOrder);
       },
       redo: async () => {
-        await reorderSections.mutateAsync({ section_ids: sectionIds });
+        yjsReorderSections(sectionIds);
       },
     });
-  }, [song, reorderSections, pushAction]);
+  }, [song, yjsReorderSections, pushAction]);
 
-  const handleDeleteLine = useCallback(async (sectionId: string, lineId: string) => {
+  const handleDeleteLine = useCallback((sectionId: string, lineId: string) => {
     // Store the line data for potential restoration
     const section = song?.sections.find(s => s.id === sectionId);
     const line = section?.lines.find(l => l.id === lineId);
     const lineText = line?.text || '';
+    const lineIndex = section?.lines.findIndex(l => l.id === lineId) ?? -1;
+    const previousLineId = lineIndex > 0 ? section?.lines[lineIndex - 1]?.id : undefined;
 
-    await deleteLine.mutateAsync({ section_id: sectionId, line_id: lineId });
+    yjsDeleteLine(sectionId, lineId);
 
-    // Note: Undo for delete is limited - adds line at end, not original position
     pushAction({
       description: 'Delete line',
       undo: async () => {
-        await addLine.mutateAsync({ section_id: sectionId, text: lineText });
+        yjsAddLine(sectionId, lineText, previousLineId);
       },
       redo: async () => {
-        // For redo, we can't delete the same line, so we just skip
-        // This is a limitation of the current API
+        // For redo, we need to find the line again by looking at current state
+        const currentSection = songRef.current?.sections.find(s => s.id === sectionId);
+        const restoredLine = currentSection?.lines.find(l => l.text === lineText);
+        if (restoredLine) {
+          yjsDeleteLine(sectionId, restoredLine.id);
+        }
       },
     });
-  }, [song, deleteLine, addLine, pushAction]);
+  }, [song, yjsDeleteLine, yjsAddLine, pushAction]);
 
-  const handleDeleteSection = useCallback(async (sectionId: string) => {
+  const handleDeleteSection = useCallback((sectionId: string) => {
     // Store section data for potential restoration
     const section = song?.sections.find(s => s.id === sectionId);
     const sectionType = section?.type || SectionType.VERSE;
+    const sectionIndex = song?.sections.findIndex(s => s.id === sectionId) ?? -1;
+    const previousSectionId = sectionIndex > 0 ? song?.sections[sectionIndex - 1]?.id : undefined;
 
-    await deleteSectionMutation.mutateAsync(sectionId);
+    yjsDeleteSection(sectionId);
 
     // Clear selection if the deleted section was selected
     if (selectedSectionId === sectionId) {
@@ -434,34 +425,39 @@ function SongPageContent({ params }: PageProps) {
     pushAction({
       description: 'Delete section',
       undo: async () => {
-        await addSection.mutateAsync({ type: sectionType });
+        yjsAddSection(sectionType, previousSectionId);
       },
       redo: async () => {
-        // For redo, we can't delete the same section
+        // For redo, we need to find the section again
+        const currentSections = songRef.current?.sections;
+        const restoredSection = currentSections?.find(s => s.type === sectionType);
+        if (restoredSection) {
+          yjsDeleteSection(restoredSection.id);
+        }
       },
     });
-  }, [song, deleteSectionMutation, addSection, selectedSectionId, pushAction]);
+  }, [song, yjsDeleteSection, yjsAddSection, selectedSectionId, pushAction]);
 
-  const handleReorderLines = useCallback(async (sectionId: string, lineIds: string[]) => {
+  const handleReorderLines = useCallback((sectionId: string, lineIds: string[]) => {
     // Store the previous order for undo
     const section = song?.sections.find(s => s.id === sectionId);
     const previousOrder = section?.lines.map(l => l.id) || [];
 
-    await reorderLines.mutateAsync({ section_id: sectionId, line_ids: lineIds });
+    yjsReorderLines(sectionId, lineIds);
 
     pushAction({
       description: 'Reorder lines',
       undo: async () => {
-        await reorderLines.mutateAsync({ section_id: sectionId, line_ids: previousOrder });
+        yjsReorderLines(sectionId, previousOrder);
       },
       redo: async () => {
-        await reorderLines.mutateAsync({ section_id: sectionId, line_ids: lineIds });
+        yjsReorderLines(sectionId, lineIds);
       },
     });
-  }, [song, reorderLines, pushAction]);
+  }, [song, yjsReorderLines, pushAction]);
 
   const handleDelete = async () => {
-    await deleteSong.mutateAsync(resolvedParams.id);
+    await deleteSongMutation.mutateAsync(resolvedParams.id);
     router.push('/');
   };
 
@@ -524,8 +520,27 @@ function SongPageContent({ params }: PageProps) {
             Greg
           </Link>
           <div className="flex items-center gap-2">
+            {/* Connection Status */}
+            <div className="flex items-center border-r border-gray-200 pr-2 mr-2">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    effectiveStatus === 'connected'
+                      ? 'bg-green-500'
+                      : effectiveStatus === 'connecting'
+                      ? 'bg-yellow-500 animate-pulse'
+                      : effectiveStatus === 'error'
+                      ? 'bg-red-500'
+                      : 'bg-gray-400'
+                  }`}
+                />
+                {effectiveConnectedUsers > 1 && (
+                  <span className="text-xs text-gray-500">{effectiveConnectedUsers}</span>
+                )}
+              </div>
+            </div>
             {/* Editor Mode Toggle */}
-            <div className="flex items-center border-r border-gray-200 dark:border-gray-700 pr-2 mr-2">
+            <div className="flex items-center border-r border-gray-200 pr-2 mr-2">
               <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
                 <button
                   onClick={() => setEditorMode('sections')}
@@ -683,7 +698,12 @@ function SongPageContent({ params }: PageProps) {
             <div className="h-full overflow-auto py-4">
               <CodeMirrorCanvas
                 song={song}
-                onSave={(parsed) => {
+                // yText is null until Yjs sync completes (prevents cursor position errors)
+                yText={yText}
+                provider={canvasProvider}
+                // In collaborative mode (yText exists), Yjs handles persistence
+                // Only use REST API save when NOT in collaborative mode
+                onSave={yText ? undefined : (parsed) => {
                   const apiData = toApiFormat(parsed);
                   saveCanvasMutation.mutate(apiData);
                 }}
@@ -727,7 +747,7 @@ function SongPageContent({ params }: PageProps) {
           <ToolboxPanel
             song={song}
             onUpdateSong={handleUpdateSong}
-            isUpdating={updateSong.isPending}
+            isUpdating={false}
           />
         }
         leftPanelOpen={aiPanelOpen}
@@ -753,10 +773,10 @@ function SongPageContent({ params }: PageProps) {
               </button>
               <button
                 onClick={handleDelete}
-                disabled={deleteSong.isPending}
+                disabled={deleteSongMutation.isPending}
                 className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
-                {deleteSong.isPending ? 'Deleting...' : 'Delete'}
+                {deleteSongMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

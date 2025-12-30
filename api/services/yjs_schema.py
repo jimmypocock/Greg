@@ -14,6 +14,13 @@ Schema:
       'time_signature': str
       'status': str
     }
+    'canvas': Y.Text
+      Raw text content for the canvas editor.
+      Format:
+        # Section Type
+        Lyric line
+        > Chord line
+        // Annotation
     'sections': Y.Array<Y.Map> [
       Y.Map {
         'id': str (section UUID)
@@ -38,11 +45,56 @@ Schema:
 import logging
 from uuid import UUID, uuid4
 
-from pycrdt import Doc, Array, Map
+from pycrdt import Doc, Array, Map, Text
 
 from api.enums import SectionType, LineType
 
 logger = logging.getLogger(__name__)
+
+
+def song_to_canvas_text(song) -> str:
+    """
+    Convert a SQL Song object to canvas text format.
+
+    Format:
+      # Section Type
+      Lyric line
+      > Chord line (chords joined by space)
+      // Annotation
+
+    Args:
+        song: Song model with sections, versions, and lines loaded
+
+    Returns:
+        Text representation for the canvas editor
+    """
+    lines = []
+
+    for section in sorted(song.sections, key=lambda s: s.order):
+        # Section header
+        section_type = section.type.value.replace("_", " ").title()
+        if section.number:
+            section_type = f"{section_type} {section.number}"
+        lines.append(f"# {section_type}")
+
+        # Get main version lines
+        main_version = section.main_version
+        if main_version:
+            for line in sorted(main_version.lines, key=lambda l: l.order):
+                if line.line_type and line.line_type.value == "CHORD":
+                    # Chord line
+                    lines.append(f"> {line.text or ''}")
+                elif line.line_type and line.line_type.value == "ANNOTATION":
+                    # Annotation
+                    lines.append(f"// {line.text or ''}")
+                else:
+                    # Regular lyric line
+                    lines.append(line.text or "")
+
+        # Add blank line after section
+        lines.append("")
+
+    return "\n".join(lines).strip()
 
 
 def create_empty_yjs_doc(song_id: UUID, title: str = "Untitled") -> Doc:
@@ -57,6 +109,9 @@ def create_empty_yjs_doc(song_id: UUID, title: str = "Untitled") -> Doc:
     meta["tempo"] = None
     meta["time_signature"] = "4/4"
     meta["status"] = "IDEA"
+
+    # Initialize canvas text (empty) - use doc.get() for proper integration
+    doc.get("canvas", type=Text)
 
     # Initialize empty sections array
     doc["sections"] = Array()
@@ -84,6 +139,16 @@ def sql_song_to_yjs(song) -> Doc:
     meta["tempo"] = song.tempo
     meta["time_signature"] = song.time_signature or "4/4"
     meta["status"] = song.status.value if song.status else "IDEA"
+
+    # Set canvas text - use doc.get() to properly integrate the Text type
+    # This is the correct pycrdt pattern for creating shared types
+    canvas_text = song_to_canvas_text(song)
+    with doc.transaction():
+        canvas = doc.get("canvas", type=Text)
+        if canvas_text:
+            canvas += canvas_text
+
+    logger.info(f"Created Yjs doc with canvas: {len(canvas_text)} chars")
 
     # Set sections - integrate into doc first
     doc["sections"] = sections_array = Array()
