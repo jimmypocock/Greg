@@ -99,6 +99,14 @@ export const canvasStyles = `
 
   /* === LINE CONTENT STYLES === */
 
+  /* Hidden prefix - prefixes are kept in document for persistence but hidden visually */
+  .cm-hidden-prefix {
+    font-size: 0;
+    width: 0;
+    display: inline-block;
+    overflow: hidden;
+  }
+
   /* Lyric lines - default, clean look */
   .cm-line-lyric {
     color: #333333;

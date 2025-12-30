@@ -4,6 +4,9 @@
  * Detects when users type prefixes (# > //) followed by space
  * and automatically converts the line to the appropriate type.
  * Also handles backspace at start of line to reset to lyric type.
+ *
+ * IMPORTANT: Prefixes are kept in the text for persistence via Yjs.
+ * The CSS hides the prefix visually, but it remains in the document.
  */
 
 import { keymap, EditorView } from '@codemirror/view';
@@ -12,11 +15,37 @@ import { LineType } from '@/types/song';
 import { lineTypesField, setLineType, getLineType } from './lineTypes';
 
 // Prefix patterns that trigger line type changes (only when followed by space)
-const PREFIX_PATTERNS: { pattern: RegExp; type: LineType; removeLength: number }[] = [
-  { pattern: /^# /, type: LineType.SECTION_HEADER, removeLength: 2 },
-  { pattern: /^> /, type: LineType.CHORD, removeLength: 2 },
-  { pattern: /^\/\/ /, type: LineType.ANNOTATION, removeLength: 3 },
+// Note: We no longer remove the prefix - it stays in the text for persistence
+const PREFIX_PATTERNS: { pattern: RegExp; type: LineType }[] = [
+  { pattern: /^# /, type: LineType.SECTION_HEADER },
+  { pattern: /^> /, type: LineType.CHORD },
+  { pattern: /^\/\/ /, type: LineType.ANNOTATION },
 ];
+
+/**
+ * Parse text content and extract line types from prefixes.
+ * Used for initial load to restore line types from persisted text.
+ */
+export function parseLineTypesFromText(text: string): Map<number, LineType> {
+  const lineTypes = new Map<number, LineType>();
+  const lines = text.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineNumber = i + 1; // CodeMirror lines are 1-indexed
+    const lineText = lines[i];
+
+    let foundType = LineType.LYRIC;
+    for (const { pattern, type } of PREFIX_PATTERNS) {
+      if (pattern.test(lineText)) {
+        foundType = type;
+        break;
+      }
+    }
+    lineTypes.set(lineNumber, foundType);
+  }
+
+  return lineTypes;
+}
 
 // Keymap for backspace at start of line to reset to lyric
 export const backspaceToLyric = keymap.of([
@@ -59,12 +88,12 @@ export const backspaceToLyric = keymap.of([
 ]);
 
 // Extension that detects prefix typing and converts to line type
+// NOTE: We no longer remove prefixes - they stay in the text for persistence
 export const prefixDetector = EditorView.updateListener.of((update) => {
   if (!update.docChanged) return;
 
   // Check each changed line for prefix patterns
   const effects: StateEffect<{ lineNumber: number; type: LineType }>[] = [];
-  const changes: { from: number; to: number; insert: string }[] = [];
 
   update.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
     // Get the line that was changed
@@ -72,41 +101,32 @@ export const prefixDetector = EditorView.updateListener.of((update) => {
     const lineText = line.text;
 
     // Check if line starts with a prefix pattern
-    for (const { pattern, type, removeLength } of PREFIX_PATTERNS) {
+    let matchedType: LineType | null = null;
+    for (const { pattern, type } of PREFIX_PATTERNS) {
       if (pattern.test(lineText)) {
-        const currentType = getLineType(update.state, line.number);
-        if (currentType !== type) {
-          effects.push(setLineType.of({ lineNumber: line.number, type }));
-          // Remove the prefix
-          changes.push({
-            from: line.from,
-            to: line.from + removeLength,
-            insert: '',
-          });
-        }
+        matchedType = type;
         break;
       }
     }
+
+    // If no prefix found, check if we need to reset to LYRIC
+    // (e.g., user deleted the prefix)
+    const currentType = getLineType(update.state, line.number);
+
+    if (matchedType !== null && currentType !== matchedType) {
+      effects.push(setLineType.of({ lineNumber: line.number, type: matchedType }));
+    } else if (matchedType === null && currentType !== LineType.LYRIC) {
+      // Line no longer has a prefix, reset to lyric
+      effects.push(setLineType.of({ lineNumber: line.number, type: LineType.LYRIC }));
+    }
   });
 
-  // Apply changes if any
-  if (effects.length > 0 || changes.length > 0) {
+  // Apply line type changes if any
+  if (effects.length > 0) {
     // Use setTimeout to avoid dispatching during an update
     setTimeout(() => {
       try {
-        // Validate changes are still valid (document may have changed due to Yjs sync)
-        const currentDocLength = update.view.state.doc.length;
-        const validChanges = changes.filter(
-          (change) => change.from >= 0 && change.to <= currentDocLength
-        );
-
-        // Only dispatch if we have valid operations
-        if (validChanges.length > 0 || effects.length > 0) {
-          update.view.dispatch({
-            changes: validChanges.length > 0 ? validChanges : undefined,
-            effects,
-          });
-        }
+        update.view.dispatch({ effects });
       } catch (e) {
         // Silently ignore errors - this can happen during Yjs sync when document changes rapidly
         console.debug('[prefixDetector] Skipped stale dispatch:', e);

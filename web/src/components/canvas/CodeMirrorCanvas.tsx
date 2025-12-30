@@ -28,7 +28,7 @@ import {
   lineTypeDecorations,
   getLineTypes,
 } from './extensions';
-import { sectionControlsDecorations, sectionDragDrop, backspaceToLyric, prefixDetector } from './extensions';
+import { sectionControlsDecorations, sectionDragDrop, backspaceToLyric, prefixDetector, parseLineTypesFromText } from './extensions';
 import type { SectionReorderDetail } from './extensions';
 import { VersionPopup } from './popups';
 import { AudioPopup } from './popups';
@@ -339,13 +339,24 @@ export function CodeMirrorCanvas({
     return () => document.removeEventListener('section-reorder', handleSectionReorder);
   }, [sectionMap, song.sections, onReorderSections]);
 
+  // In collaborative mode, parse line types from Y.Text content (which contains prefixes)
+  // In non-collaborative mode, use the line types from the song structure
+  const effectiveLineTypes = useMemo(() => {
+    if (isCollaborative && yText) {
+      const content = yText.toString();
+      console.log('[CodeMirror] Parsing line types from Y.Text content');
+      return parseLineTypesFromText(content);
+    }
+    return initialLineTypes;
+  }, [isCollaborative, yText, initialLineTypes]);
+
   // Extensions (memoize to avoid re-creating on every render)
   const extensions = useMemo(
     () => {
       const baseExtensions = [
         backspaceToLyric, // Must come before default keymap
         keymap.of([...defaultKeymap, ...historyKeymap]),
-        lineTypesField.init(() => initialLineTypes),
+        lineTypesField.init(() => effectiveLineTypes),
         lineTypeDecorations,
         sectionControlsDecorations,
         sectionDragDrop,
@@ -376,7 +387,7 @@ export function CodeMirrorCanvas({
         ];
       }
     },
-    [initialChords, initialLineTypes, isCollaborative, yText, provider]
+    [initialChords, effectiveLineTypes, isCollaborative, yText, provider]
   );
 
   // Debounce timer for auto-save

@@ -173,10 +173,21 @@ const lineDecorations: Record<LineType, Decoration> = {
   [LineType.ANNOTATION]: Decoration.line({ class: 'cm-line-annotation' }),
 };
 
+// Prefix lengths for each line type (to hide visually)
+const PREFIX_LENGTHS: Record<LineType, number> = {
+  [LineType.LYRIC]: 0,
+  [LineType.SECTION_HEADER]: 2, // "# "
+  [LineType.CHORD]: 2, // "> "
+  [LineType.ANNOTATION]: 3, // "// "
+};
+
+// Decoration to hide prefix characters (makes them invisible but keeps them in doc)
+const hiddenPrefixMark = Decoration.mark({ class: 'cm-hidden-prefix' });
+
 // Build line decorations based on line types
 function buildLineDecorations(
   state: {
-    doc: { lines: number; line: (n: number) => { from: number } };
+    doc: { lines: number; line: (n: number) => { from: number; text: string } };
     field: (field: StateField<Map<number, LineType>>) => Map<number, LineType>;
   }
 ): DecorationSet {
@@ -186,7 +197,25 @@ function buildLineDecorations(
   for (let i = 1; i <= state.doc.lines; i++) {
     const lineType = types.get(i) || LineType.LYRIC;
     const line = state.doc.line(i);
+
+    // Add line-level decoration for styling
     builder.add(line.from, line.from, lineDecorations[lineType]);
+
+    // Add mark decoration to hide prefix characters
+    const prefixLen = PREFIX_LENGTHS[lineType];
+    if (prefixLen > 0 && line.text.length >= prefixLen) {
+      // Verify the line actually starts with the expected prefix
+      const expectedPrefixes: Record<LineType, string> = {
+        [LineType.SECTION_HEADER]: '# ',
+        [LineType.CHORD]: '> ',
+        [LineType.ANNOTATION]: '// ',
+        [LineType.LYRIC]: '',
+      };
+      const expectedPrefix = expectedPrefixes[lineType];
+      if (line.text.startsWith(expectedPrefix)) {
+        builder.add(line.from, line.from + prefixLen, hiddenPrefixMark);
+      }
+    }
   }
 
   return builder.finish();

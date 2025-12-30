@@ -24,4 +24,4 @@ export { sectionDragDrop } from './dragDrop';
 export type { SectionReorderDetail } from './dragDrop';
 
 // Prefix detection
-export { backspaceToLyric, prefixDetector } from './prefixDetection';
+export { backspaceToLyric, prefixDetector, parseLineTypesFromText } from './prefixDetection';
