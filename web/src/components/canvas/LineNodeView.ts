@@ -4,16 +4,15 @@
  * Features:
  * - Gutter shows line type icon (empty for lyric, # for header, > for chord, // for annotation)
  * - Click on gutter cycles through line types
- * - When Shift is held, gutter shows drag icon and enables dragging
+ * - Drag from gutter to reorder lines
  */
 
-import { Node as ProseMirrorNode } from 'prosemirror-model';
+import { Node as ProseMirrorNode, DOMSerializer } from 'prosemirror-model';
 import { NodeSelection } from 'prosemirror-state';
 import { EditorView, NodeView } from 'prosemirror-view';
 import { LineType } from '@/types/song';
 
-import { LINE_TYPE_CYCLE, LINE_TYPE_ICONS, DRAG_ICON } from './constants';
-import { getIsShiftHeld, subscribeToShift } from './shiftTracking';
+import { LINE_TYPE_CYCLE, LINE_TYPE_ICONS } from './constants';
 
 export class LineNodeView implements NodeView {
   dom: HTMLElement;
@@ -22,7 +21,6 @@ export class LineNodeView implements NodeView {
   private node: ProseMirrorNode;
   private view: EditorView;
   private getPos: () => number | undefined;
-  private unsubscribeShift: () => void;
 
   constructor(
     node: ProseMirrorNode,
@@ -37,10 +35,11 @@ export class LineNodeView implements NodeView {
     this.dom = document.createElement('div');
     this.dom.className = 'pm-line-wrapper';
 
-    // Create gutter element (acts as drag handle when shift is held)
+    // Create gutter element (drag handle)
     this.gutter = document.createElement('div');
     this.gutter.className = 'pm-gutter';
     this.gutter.contentEditable = 'false';
+    this.gutter.draggable = true;
     this.dom.appendChild(this.gutter);
 
     // Create content area
@@ -53,51 +52,57 @@ export class LineNodeView implements NodeView {
 
     // Bind event handlers
     this.handleGutterClick = this.handleGutterClick.bind(this);
-    this.handleGutterMouseDown = this.handleGutterMouseDown.bind(this);
+    this.handleDragStart = this.handleDragStart.bind(this);
     this.gutter.addEventListener('click', this.handleGutterClick);
-    this.gutter.addEventListener('mousedown', this.handleGutterMouseDown);
-
-    // Subscribe to shift key changes
-    this.unsubscribeShift = subscribeToShift(() => this.updateGutter());
+    this.gutter.addEventListener('dragstart', this.handleDragStart);
   }
 
   private updateGutter() {
     const lineType = (this.node.attrs.lineType as LineType) || LineType.LYRIC;
     this.dom.setAttribute('data-line-type', lineType);
     this.contentDOM.className = `pm-line-content pm-line-${lineType.toLowerCase()}`;
-
-    // Show drag icon and enable dragging when shift is held
-    if (getIsShiftHeld()) {
-      this.gutter.textContent = DRAG_ICON;
-      this.gutter.classList.add('pm-gutter-drag');
-      this.gutter.draggable = true;
-    } else {
-      this.gutter.textContent = LINE_TYPE_ICONS[lineType];
-      this.gutter.classList.remove('pm-gutter-drag');
-      this.gutter.draggable = false;
-    }
+    this.gutter.textContent = LINE_TYPE_ICONS[lineType];
   }
 
-  private handleGutterMouseDown(e: MouseEvent) {
-    // If shift is held, let the drag happen (don't prevent default)
-    if (getIsShiftHeld()) {
-      // Select the node so ProseMirror knows what to drag
-      const pos = this.getPos();
-      if (pos !== undefined) {
-        const { state } = this.view;
-        const selection = NodeSelection.create(state.doc, pos);
-        this.view.dispatch(state.tr.setSelection(selection));
-      }
-      return; // Let the drag proceed
+  private handleDragStart(e: DragEvent) {
+    const pos = this.getPos();
+    if (pos === undefined || !e.dataTransfer) return;
+
+    const { state } = this.view;
+    const lineStart = pos;
+    const lineEnd = pos + this.node.nodeSize;
+
+    // Check if there's an existing selection that includes this line
+    const { from, to } = state.selection;
+    const selectionIncludesThisLine = from < lineEnd && to > lineStart;
+    const isMultiLineSelection = !state.selection.empty && (to - from > this.node.nodeSize);
+
+    // If there's a multi-line selection that includes this line, use it
+    // Otherwise, select just this line
+    if (selectionIncludesThisLine && isMultiLineSelection) {
+      // Use existing selection - don't change it
+    } else {
+      // Select just this node
+      const selection = NodeSelection.create(state.doc, pos);
+      this.view.dispatch(state.tr.setSelection(selection));
     }
+
+    // Get the current selection (may have been updated above)
+    const currentSelection = this.view.state.selection;
+    const slice = currentSelection.content();
+
+    // Serialize to HTML for the drag data
+    const serializer = DOMSerializer.fromSchema(state.schema);
+    const fragment = serializer.serializeFragment(slice.content);
+    const div = document.createElement('div');
+    div.appendChild(fragment);
+
+    e.dataTransfer.setData('text/html', div.innerHTML);
+    e.dataTransfer.setData('text/plain', slice.content.textBetween(0, slice.content.size, '\n'));
+    e.dataTransfer.effectAllowed = 'move';
   }
 
   private handleGutterClick(e: MouseEvent) {
-    // Don't cycle line types if shift is held (drag mode)
-    if (getIsShiftHeld()) {
-      return;
-    }
-
     e.preventDefault();
     e.stopPropagation();
 
@@ -149,7 +154,6 @@ export class LineNodeView implements NodeView {
 
   destroy() {
     this.gutter.removeEventListener('click', this.handleGutterClick);
-    this.gutter.removeEventListener('mousedown', this.handleGutterMouseDown);
-    this.unsubscribeShift();
+    this.gutter.removeEventListener('dragstart', this.handleDragStart);
   }
 }

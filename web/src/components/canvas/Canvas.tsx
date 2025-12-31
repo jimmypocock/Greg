@@ -22,7 +22,7 @@ import { dropCursor } from 'prosemirror-dropcursor';
 import { gapCursor } from 'prosemirror-gapcursor';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
-import { ySyncPlugin, yUndoPlugin, initProseMirrorDoc } from 'y-prosemirror';
+import { ySyncPlugin, yUndoPlugin, undo, redo, initProseMirrorDoc } from 'y-prosemirror';
 
 import { songSchema, createEmptyDoc } from './schema';
 import { createNodeViews } from './nodeViews';
@@ -259,6 +259,11 @@ export function Canvas({
     const { doc, mapping } = initProseMirrorDoc(yXmlFragment, songSchema);
 
     const plugins = [
+      keymap({
+        'Mod-z': undo,
+        'Mod-y': redo,
+        'Mod-Shift-z': redo,
+      }),
       keymap(baseKeymap),
       prefixDetectionPlugin(),
       hidePrefixPlugin(),
@@ -278,6 +283,52 @@ export function Canvas({
       state,
       nodeViews: createNodeViews(),
       clipboardTextParser,
+      handleDrop(view, event, slice, moved) {
+        // Find the drop position
+        const coords = { left: event.clientX, top: event.clientY };
+        const pos = view.posAtCoords(coords);
+        if (!pos) return false;
+
+        // Resolve the position and find the nearest line boundary
+        const $pos = view.state.doc.resolve(pos.pos);
+
+        // Find the line node we're dropping into/near
+        let insertPos: number | null = null;
+
+        // If we're inside a line, find its end position to insert after it
+        for (let d = $pos.depth; d > 0; d--) {
+          const node = $pos.node(d);
+          if (node.type.name === 'line') {
+            // Insert after this line
+            insertPos = $pos.after(d);
+            break;
+          } else if (node.type.name === 'part') {
+            // We're in a part but not in a line - insert at the position
+            insertPos = pos.pos;
+            break;
+          }
+        }
+
+        // If we didn't find a good position, let default handling occur
+        if (insertPos === null) return false;
+
+        // Create transaction to insert at line boundary
+        const tr = view.state.tr;
+
+        // If this was a move operation, delete the original content first
+        if (moved) {
+          tr.deleteSelection();
+        }
+
+        // Map the insert position after any deletions
+        const mappedPos = tr.mapping.map(insertPos);
+
+        // Insert the content
+        tr.insert(mappedPos, slice.content);
+
+        view.dispatch(tr);
+        return true; // We handled the drop
+      },
       dispatchTransaction(tr) {
         if (!viewRef.current) return;
 
