@@ -58,6 +58,7 @@ const label: NodeSpec = {
 
 const line: NodeSpec = {
   content: 'text*',
+  draggable: true,
   attrs: {
     lineType: { default: LineType.LYRIC },
   },

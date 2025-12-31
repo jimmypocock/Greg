@@ -4,10 +4,11 @@
  * Features:
  * - Gutter shows line type icon (empty for lyric, # for header, > for chord, // for annotation)
  * - Click on gutter cycles through line types
- * - When Shift is held, gutter shows drag icon
+ * - When Shift is held, gutter shows drag icon and enables dragging
  */
 
 import { Node as ProseMirrorNode } from 'prosemirror-model';
+import { NodeSelection } from 'prosemirror-state';
 import { EditorView, NodeView } from 'prosemirror-view';
 import { LineType } from '@/types/song';
 
@@ -36,7 +37,7 @@ export class LineNodeView implements NodeView {
     this.dom = document.createElement('div');
     this.dom.className = 'pm-line-wrapper';
 
-    // Create gutter element
+    // Create gutter element (acts as drag handle when shift is held)
     this.gutter = document.createElement('div');
     this.gutter.className = 'pm-gutter';
     this.gutter.contentEditable = 'false';
@@ -52,7 +53,9 @@ export class LineNodeView implements NodeView {
 
     // Bind event handlers
     this.handleGutterClick = this.handleGutterClick.bind(this);
+    this.handleGutterMouseDown = this.handleGutterMouseDown.bind(this);
     this.gutter.addEventListener('click', this.handleGutterClick);
+    this.gutter.addEventListener('mousedown', this.handleGutterMouseDown);
 
     // Subscribe to shift key changes
     this.unsubscribeShift = subscribeToShift(() => this.updateGutter());
@@ -63,17 +66,38 @@ export class LineNodeView implements NodeView {
     this.dom.setAttribute('data-line-type', lineType);
     this.contentDOM.className = `pm-line-content pm-line-${lineType.toLowerCase()}`;
 
-    // Show drag icon when shift is held, otherwise show line type icon
+    // Show drag icon and enable dragging when shift is held
     if (getIsShiftHeld()) {
       this.gutter.textContent = DRAG_ICON;
       this.gutter.classList.add('pm-gutter-drag');
+      this.gutter.draggable = true;
     } else {
       this.gutter.textContent = LINE_TYPE_ICONS[lineType];
       this.gutter.classList.remove('pm-gutter-drag');
+      this.gutter.draggable = false;
+    }
+  }
+
+  private handleGutterMouseDown(e: MouseEvent) {
+    // If shift is held, let the drag happen (don't prevent default)
+    if (getIsShiftHeld()) {
+      // Select the node so ProseMirror knows what to drag
+      const pos = this.getPos();
+      if (pos !== undefined) {
+        const { state } = this.view;
+        const selection = NodeSelection.create(state.doc, pos);
+        this.view.dispatch(state.tr.setSelection(selection));
+      }
+      return; // Let the drag proceed
     }
   }
 
   private handleGutterClick(e: MouseEvent) {
+    // Don't cycle line types if shift is held (drag mode)
+    if (getIsShiftHeld()) {
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
 
@@ -125,6 +149,7 @@ export class LineNodeView implements NodeView {
 
   destroy() {
     this.gutter.removeEventListener('click', this.handleGutterClick);
+    this.gutter.removeEventListener('mousedown', this.handleGutterMouseDown);
     this.unsubscribeShift();
   }
 }
