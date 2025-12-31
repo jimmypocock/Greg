@@ -13,10 +13,9 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { EditorState, Transaction, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
+import { EditorState, Transaction, Plugin, PluginKey } from 'prosemirror-state';
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
 import { Node as ProseMirrorNode } from 'prosemirror-model';
-import { history } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
 import { baseKeymap } from 'prosemirror-commands';
 import { dropCursor } from 'prosemirror-dropcursor';
@@ -27,7 +26,7 @@ import { ySyncPlugin, yUndoPlugin, initProseMirrorDoc } from 'y-prosemirror';
 
 import { songSchema, createEmptyDoc } from './schema';
 import { createNodeViews } from './nodeViews';
-import { Song, SectionType, LineType } from '@/types/song';
+import { Song, LineType } from '@/types/song';
 import './canvas.css';
 
 interface CanvasProps {
@@ -77,6 +76,10 @@ function songToDoc(song: Song): ProseMirrorNode {
         ? lines
         : [songSchema.node('line', { lineType: LineType.LYRIC })];
 
+    const children = labelText
+      ? [songSchema.node('label', null, [songSchema.text(labelText)]), ...lineNodes]
+      : lineNodes;
+
     return songSchema.node(
       'part',
       {
@@ -84,10 +87,7 @@ function songToDoc(song: Song): ProseMirrorNode {
         type: section.type,
         mainVersionId: section.main_version_id,
       },
-      [
-        songSchema.node('label', null, labelText ? [songSchema.text(labelText)] : []),
-        ...lineNodes,
-      ]
+      children
     );
   });
 
@@ -96,7 +96,7 @@ function songToDoc(song: Song): ProseMirrorNode {
 
 /**
  * Plugin to detect prefix typing and convert line types.
- * When # is typed, creates a new part (section) instead of just changing line type.
+ * All prefixes work the same way - they just change the line type.
  */
 function prefixDetectionPlugin() {
   return new Plugin({
@@ -110,160 +110,35 @@ function prefixDetectionPlugin() {
       let tr: Transaction | null = null;
 
       // Prefix patterns
+      const headerPattern = /^#\s/;
       const chordPattern = /^>\s/;
       const annotationPattern = /^\/\/\s/;
-      const sectionPattern = /^#\s/;
 
-      // First pass: find ONE line that needs to become a new part
-      // (Process only one at a time to avoid position mapping complexity)
-      let foundLinePos = -1;
-      let foundLineText = '';
-      let foundPartPos = -1;
-      let foundPartNode: ProseMirrorNode | null = null;
-
-      // First, collect all parts and their positions
-      const parts: Array<{ node: ProseMirrorNode; pos: number; endPos: number }> = [];
-      newState.doc.forEach((child, offset) => {
-        if (child.type.name === 'part') {
-          parts.push({
-            node: child,
-            pos: offset,
-            endPos: offset + child.nodeSize,
-          });
-        }
-      });
-
-      // Find # lines that need to become new parts
       newState.doc.descendants((node, pos) => {
-        if (foundLinePos >= 0) return false; // Stop after finding one
         if (node.type.name !== 'line') return;
 
         const text = node.textContent;
+        const currentType = node.attrs.lineType;
 
-        // If line starts with "# " (hash space), mark for conversion to part
-        if (sectionPattern.test(text)) {
-          // Find the parent part by checking which part contains this position
-          const parentPart = parts.find((p) => pos >= p.pos && pos < p.endPos);
-          if (parentPart) {
-            foundLinePos = pos;
-            foundLineText = text;
-            foundPartPos = parentPart.pos;
-            foundPartNode = parentPart.node;
-            return false; // Stop iteration
-          }
+        if (headerPattern.test(text) && currentType !== LineType.SECTION_HEADER) {
+          if (!tr) tr = newState.tr;
+          tr.setNodeMarkup(pos, undefined, { lineType: LineType.SECTION_HEADER });
+        } else if (chordPattern.test(text) && currentType !== LineType.CHORD) {
+          if (!tr) tr = newState.tr;
+          tr.setNodeMarkup(pos, undefined, { lineType: LineType.CHORD });
+        } else if (annotationPattern.test(text) && currentType !== LineType.ANNOTATION) {
+          if (!tr) tr = newState.tr;
+          tr.setNodeMarkup(pos, undefined, { lineType: LineType.ANNOTATION });
+        } else if (
+          !headerPattern.test(text) &&
+          !chordPattern.test(text) &&
+          !annotationPattern.test(text) &&
+          currentType !== LineType.LYRIC
+        ) {
+          if (!tr) tr = newState.tr;
+          tr.setNodeMarkup(pos, undefined, { lineType: LineType.LYRIC });
         }
       });
-
-      // Convert the # line to a new part
-      if (foundLinePos >= 0 && foundPartNode !== null) {
-        const pos = foundLinePos;
-        const partPos = foundPartPos;
-        const partNode: ProseMirrorNode = foundPartNode;
-
-        // Get label text (remove "# " prefix)
-        const labelText = foundLineText.replace(/^#\s/, '');
-
-        // Find the index of this line within the part
-        let lineIndex = -1;
-        partNode.forEach((child, offset, index) => {
-          if (lineIndex === -1) {
-            const childPos = partPos + 1 + offset;
-            if (childPos === pos) {
-              lineIndex = index;
-            }
-          }
-        });
-
-        // Validate we found the line
-        if (lineIndex === -1) {
-          console.warn('[prefixDetection] Could not find line in parent part');
-        } else {
-          // Skip if this is the first line (index 1, after label) of a new part with empty label
-          // This prevents infinite loops when we create new parts
-          const isFirstLine = lineIndex === 1;
-          const labelNode = partNode.firstChild;
-          const hasEmptyLabel = labelNode?.textContent === '';
-
-          if (isFirstLine && hasEmptyLabel) {
-            // Don't convert - this is likely a newly created part
-          } else {
-            // Collect lines that should move to the new part (lines after the # line)
-            const linesToMove: ProseMirrorNode[] = [];
-            let passedTargetLine = false;
-
-            partNode.forEach((child, offset, index) => {
-              if (index === lineIndex) {
-                passedTargetLine = true;
-              } else if (passedTargetLine && child.type.name === 'line') {
-                linesToMove.push(child);
-              }
-            });
-
-            // Create the new part
-            const newPartId = crypto.randomUUID();
-            const newPartLines = linesToMove.length > 0
-              ? linesToMove
-              : [songSchema.node('line', { lineType: LineType.LYRIC }, [])];
-
-            const newPart = songSchema.node(
-              'part',
-              { id: newPartId, type: SectionType.VERSE, mainVersionId: null },
-              [
-                songSchema.node('label', null, labelText ? [songSchema.text(labelText)] : []),
-                ...newPartLines,
-              ]
-            );
-
-            // Calculate what to delete: from the # line to end of part content
-            const deleteFrom = pos;
-            const deleteTo = partPos + partNode.nodeSize - 1;
-
-            tr = newState.tr;
-
-            // Delete the # line and everything after it
-            tr.delete(deleteFrom, deleteTo);
-
-            // The part has shrunk - calculate new insert position (right after the modified part)
-            const deletedAmount = deleteTo - deleteFrom;
-            const insertAt = partPos + partNode.nodeSize - deletedAmount;
-
-            // Insert the new part
-            tr.insert(insertAt, newPart);
-
-            // Position cursor at the start of the new part's first line
-            // The new part starts at insertAt, label is at insertAt+1, first line is after label
-            const labelSize = newPart.child(0).nodeSize;
-            const cursorPos = insertAt + 1 + labelSize + 1; // inside first line
-            tr.setSelection(TextSelection.near(tr.doc.resolve(cursorPos)));
-          }
-        }
-      }
-
-      // Second pass: handle chord and annotation line types (only if we didn't create parts)
-      if (!tr) {
-        newState.doc.descendants((node, pos) => {
-          if (node.type.name !== 'line') return;
-
-          const text = node.textContent;
-          const currentType = node.attrs.lineType;
-
-          if (chordPattern.test(text) && currentType !== LineType.CHORD) {
-            if (!tr) tr = newState.tr;
-            tr.setNodeMarkup(pos, undefined, { lineType: LineType.CHORD });
-          } else if (annotationPattern.test(text) && currentType !== LineType.ANNOTATION) {
-            if (!tr) tr = newState.tr;
-            tr.setNodeMarkup(pos, undefined, { lineType: LineType.ANNOTATION });
-          } else if (
-            !chordPattern.test(text) &&
-            !annotationPattern.test(text) &&
-            !sectionPattern.test(text) &&
-            currentType !== LineType.LYRIC
-          ) {
-            if (!tr) tr = newState.tr;
-            tr.setNodeMarkup(pos, undefined, { lineType: LineType.LYRIC });
-          }
-        });
-      }
 
       return tr;
     },

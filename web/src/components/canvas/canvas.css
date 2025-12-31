@@ -2,7 +2,8 @@
  * Canvas Editor Styles
  *
  * Styles for the ProseMirror-based song editor.
- * Uses CSS ::before pseudo-elements for line type gutters.
+ * - Gutter shows line type icons by default
+ * - Shift+hover shows drag handle for reordering
  */
 
 .pm-canvas {
@@ -58,136 +59,118 @@
   outline: none;
 }
 
-/* Part wrapper - invisible */
+/* Part wrapper */
 .pm-part {
   margin: 0;
   padding: 0;
 }
 
-/* Line wrapper - with CSS ::before gutter */
+/* Line wrapper */
 .pm-line-wrapper {
-  position: relative;
-  padding-left: 33px;
-}
-
-/* Gutter via ::before pseudo-element */
-.pm-line-wrapper::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 32px;
-  height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border-right: 1px solid #e5e7eb;
-  background: #f9fafb;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: ui-monospace, monospace;
-  opacity: 0.6;
-  transition: background 0.15s, opacity 0.15s;
+  align-items: stretch;
 }
 
-.pm-line-wrapper:hover::before {
-  background: #f3f4f6;
-  opacity: 1;
-}
-
-.dark .pm-line-wrapper::before {
-  background: #1f2937;
-  border-color: #374151;
-}
-
-.dark .pm-line-wrapper:hover::before {
-  background: #374151;
-}
-
-/* Line type specific gutter icons */
-.pm-line-wrapper[data-line-type="SECTION_HEADER"]::before {
-  content: '#';
-  color: #333;
-}
-
-.pm-line-wrapper[data-line-type="CHORD"]::before {
-  content: '>';
-  color: #2563eb;
-}
-
-.pm-line-wrapper[data-line-type="ANNOTATION"]::before {
-  content: '//';
-  color: #6b7280;
-}
-
-.pm-line-wrapper[data-line-type="LYRIC"]::before {
-  content: '';
-  color: #9ca3af;
-}
-
-.dark .pm-line-wrapper[data-line-type="SECTION_HEADER"]::before {
-  color: #e5e5e5;
-}
-
-.dark .pm-line-wrapper[data-line-type="CHORD"]::before {
-  color: #60a5fa;
-}
-
-/* Label wrapper - with drag handle */
+/* Label wrapper */
 .pm-label-wrapper {
   display: flex;
-  align-items: center;
+  align-items: stretch;
 }
 
-/* Drag handle for reordering parts */
-.pm-drag-handle {
+/* Gutter element (shared between lines and labels) */
+.pm-gutter {
   width: 32px;
-  height: 100%;
-  min-height: 28px;
+  min-height: 24px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   border-right: 1px solid #e5e7eb;
   background: #f9fafb;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
+  font-family: ui-monospace, monospace;
   color: #9ca3af;
-  cursor: grab;
+  cursor: pointer;
   user-select: none;
   transition: background 0.15s, color 0.15s;
-  letter-spacing: -2px;
 }
 
-.pm-drag-handle:hover {
+.pm-gutter:hover {
   background: #f3f4f6;
-  color: #6b7280;
 }
 
-.pm-drag-handle:active {
-  cursor: grabbing;
-  background: #e5e7eb;
-}
-
-.dark .pm-drag-handle {
+.dark .pm-gutter {
   background: #1f2937;
   border-color: #374151;
   color: #6b7280;
 }
 
-.dark .pm-drag-handle:hover {
+.dark .pm-gutter:hover {
   background: #374151;
+}
+
+/* Gutter in drag mode */
+.pm-gutter-drag {
+  cursor: grab;
+  color: #6b7280;
+  letter-spacing: -2px;
+  font-size: 14px;
+}
+
+.pm-gutter-drag:hover {
+  color: #374151;
+  background: #e5e7eb;
+}
+
+.pm-gutter-drag:active {
+  cursor: grabbing;
+}
+
+.dark .pm-gutter-drag {
   color: #9ca3af;
+}
+
+.dark .pm-gutter-drag:hover {
+  color: #e5e5e5;
+  background: #4b5563;
+}
+
+/* Label gutter - taller for header text */
+.pm-gutter-label {
+  min-height: 28px;
+}
+
+/* Line type colors in gutter */
+.pm-line-wrapper[data-line-type="SECTION_HEADER"] .pm-gutter {
+  color: #333;
+}
+
+.pm-line-wrapper[data-line-type="CHORD"] .pm-gutter {
+  color: #2563eb;
+}
+
+.pm-line-wrapper[data-line-type="ANNOTATION"] .pm-gutter {
+  color: #6b7280;
+}
+
+.dark .pm-line-wrapper[data-line-type="SECTION_HEADER"] .pm-gutter {
+  color: #e5e5e5;
+}
+
+.dark .pm-line-wrapper[data-line-type="CHORD"] .pm-gutter {
+  color: #60a5fa;
 }
 
 /* Content areas */
 .pm-line-content {
+  flex: 1;
   padding: 2px 8px;
   min-height: 24px;
 }
 
 .pm-label-content {
+  flex: 1;
   padding: 2px 8px;
   font-weight: 700;
   color: #333;
@@ -288,4 +271,3 @@
 .ProseMirror-dropcursor {
   border-left: 2px solid #3b82f6;
 }
-

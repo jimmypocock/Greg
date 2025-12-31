@@ -18,7 +18,7 @@ const doc: NodeSpec = {
 };
 
 const part: NodeSpec = {
-  content: 'label line*',
+  content: 'label? line+',
   attrs: {
     id: { default: null },
     type: { default: SectionType.VERSE },
@@ -112,7 +112,6 @@ export function createEmptyDoc() {
   const id = crypto.randomUUID();
   return songSchema.node('doc', null, [
     songSchema.node('part', { id, type: SectionType.VERSE, mainVersionId: null }, [
-      songSchema.node('label', null, [songSchema.text('Verse 1')]),
       songSchema.node('line', { lineType: LineType.LYRIC }),
     ]),
   ]);
@@ -122,7 +121,7 @@ export function createEmptyDoc() {
  * Create a part node with given content.
  */
 export function createPart(
-  label: string,
+  label: string | null = null,
   type: SectionType = SectionType.VERSE,
   lines: Array<{ text: string; lineType: LineType }> = []
 ) {
@@ -138,14 +137,11 @@ export function createPart(
         )
       : [songSchema.node('line', { lineType: LineType.LYRIC })];
 
-  return songSchema.node(
-    'part',
-    { id, type, mainVersionId: null },
-    [
-      songSchema.node('label', null, label ? [songSchema.text(label)] : []),
-      ...lineNodes,
-    ]
-  );
+  const children = label
+    ? [songSchema.node('label', null, [songSchema.text(label)]), ...lineNodes]
+    : lineNodes;
+
+  return songSchema.node('part', { id, type, mainVersionId: null }, children);
 }
 
 export type { NodeSpec, MarkSpec };
