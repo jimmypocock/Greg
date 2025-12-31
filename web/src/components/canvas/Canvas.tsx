@@ -19,10 +19,8 @@ import { Node as ProseMirrorNode } from 'prosemirror-model';
 import { history } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
 import { baseKeymap } from 'prosemirror-commands';
-import { TextSelection } from 'prosemirror-state';
 import { dropCursor } from 'prosemirror-dropcursor';
 import { gapCursor } from 'prosemirror-gapcursor';
-import { InputRule, inputRules } from 'prosemirror-inputrules';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { ySyncPlugin, yUndoPlugin, initProseMirrorDoc } from 'y-prosemirror';
@@ -97,55 +95,6 @@ function songToDoc(song: Song): ProseMirrorNode {
 }
 
 /**
- * InputRules for immediate prefix detection.
- * Triggers when user types space after a prefix symbol.
- * Re-inserts the matched text to preserve it.
- */
-function createPrefixInputRules() {
-  // Rule: typing "# " at start of line → SECTION_HEADER
-  const sectionRule = new InputRule(/^#\s$/, (state, match, start, end) => {
-    const $pos = state.doc.resolve(start);
-    const node = $pos.parent;
-    if (node.type.name !== 'line') return null;
-
-    const linePos = $pos.before($pos.depth);
-    // Re-insert matched text, then set node markup
-    const tr = state.tr
-      .insertText(match[0], start, end)
-      .setNodeMarkup(linePos, undefined, { lineType: LineType.SECTION_HEADER });
-    return tr;
-  });
-
-  // Rule: typing "> " at start of line → CHORD
-  const chordRule = new InputRule(/^>\s$/, (state, match, start, end) => {
-    const $pos = state.doc.resolve(start);
-    const node = $pos.parent;
-    if (node.type.name !== 'line') return null;
-
-    const linePos = $pos.before($pos.depth);
-    const tr = state.tr
-      .insertText(match[0], start, end)
-      .setNodeMarkup(linePos, undefined, { lineType: LineType.CHORD });
-    return tr;
-  });
-
-  // Rule: typing "// " at start of line → ANNOTATION
-  const annotationRule = new InputRule(/^\/\/\s$/, (state, match, start, end) => {
-    const $pos = state.doc.resolve(start);
-    const node = $pos.parent;
-    if (node.type.name !== 'line') return null;
-
-    const linePos = $pos.before($pos.depth);
-    const tr = state.tr
-      .insertText(match[0], start, end)
-      .setNodeMarkup(linePos, undefined, { lineType: LineType.ANNOTATION });
-    return tr;
-  });
-
-  return inputRules({ rules: [sectionRule, chordRule, annotationRule] });
-}
-
-/**
  * Plugin to detect prefix typing and convert line types.
  */
 function prefixDetectionPlugin() {
@@ -165,26 +114,45 @@ function prefixDetectionPlugin() {
         const text = node.textContent;
         const currentType = node.attrs.lineType;
 
-        if (text.startsWith('> ') && currentType !== LineType.CHORD) {
+        // Prefix patterns (same as CodeMirror version)
+        const chordPattern = /^>\s/;
+        const annotationPattern = /^\/\/\s/;
+        const sectionPattern = /^#\s/;
+
+        // Debug: log what we see
+        console.log('[prefixDetection]', {
+          text: JSON.stringify(text),
+          currentType,
+          matchesChord: chordPattern.test(text),
+          matchesAnnotation: annotationPattern.test(text),
+          matchesSection: sectionPattern.test(text),
+        });
+
+        if (chordPattern.test(text) && currentType !== LineType.CHORD) {
+          console.log('[prefixDetection] → changing to CHORD');
           if (!tr) tr = newState.tr;
           tr.setNodeMarkup(pos, undefined, { lineType: LineType.CHORD });
-        } else if (text.startsWith('// ') && currentType !== LineType.ANNOTATION) {
+        } else if (annotationPattern.test(text) && currentType !== LineType.ANNOTATION) {
+          console.log('[prefixDetection] → changing to ANNOTATION');
           if (!tr) tr = newState.tr;
           tr.setNodeMarkup(pos, undefined, { lineType: LineType.ANNOTATION });
-        } else if (text.startsWith('# ') && currentType !== LineType.SECTION_HEADER) {
+        } else if (sectionPattern.test(text) && currentType !== LineType.SECTION_HEADER) {
+          console.log('[prefixDetection] → changing to SECTION_HEADER');
           if (!tr) tr = newState.tr;
           tr.setNodeMarkup(pos, undefined, { lineType: LineType.SECTION_HEADER });
         } else if (
-          !text.startsWith('> ') &&
-          !text.startsWith('// ') &&
-          !text.startsWith('# ') &&
+          !chordPattern.test(text) &&
+          !annotationPattern.test(text) &&
+          !sectionPattern.test(text) &&
           currentType !== LineType.LYRIC
         ) {
+          console.log('[prefixDetection] → changing to LYRIC');
           if (!tr) tr = newState.tr;
           tr.setNodeMarkup(pos, undefined, { lineType: LineType.LYRIC });
         }
       });
 
+      console.log('[prefixDetection] returning transaction:', tr ? 'yes' : 'no');
       return tr;
     },
   });
@@ -192,8 +160,14 @@ function prefixDetectionPlugin() {
 
 /**
  * Plugin to hide prefix characters visually.
+ * Checks text patterns directly (not lineType attribute) so it works
+ * immediately when text is typed, before appendTransaction updates the attribute.
  */
 function hidePrefixPlugin() {
+  const chordPattern = /^>\s/;
+  const annotationPattern = /^\/\/\s/;
+  const sectionPattern = /^#\s/;
+
   return new Plugin({
     key: new PluginKey('hidePrefix'),
 
@@ -204,19 +178,18 @@ function hidePrefixPlugin() {
         state.doc.descendants((node, pos) => {
           if (node.type.name !== 'line') return;
 
-          const lineType = node.attrs.lineType as LineType;
           const text = node.textContent;
 
-          // Hide prefix in text
-          if (lineType === LineType.CHORD && text.startsWith('> ')) {
+          // Hide prefix based on text pattern (not lineType attribute)
+          if (chordPattern.test(text)) {
             decorations.push(
               Decoration.inline(pos + 1, pos + 3, { class: 'pm-hidden-prefix' })
             );
-          } else if (lineType === LineType.ANNOTATION && text.startsWith('// ')) {
+          } else if (annotationPattern.test(text)) {
             decorations.push(
               Decoration.inline(pos + 1, pos + 4, { class: 'pm-hidden-prefix' })
             );
-          } else if (lineType === LineType.SECTION_HEADER && text.startsWith('# ')) {
+          } else if (sectionPattern.test(text)) {
             decorations.push(
               Decoration.inline(pos + 1, pos + 3, { class: 'pm-hidden-prefix' })
             );
@@ -255,7 +228,6 @@ export function Canvas({
 
     const plugins = [
       keymap(baseKeymap),
-      createPrefixInputRules(),
       prefixDetectionPlugin(),
       hidePrefixPlugin(),
       dropCursor(),
