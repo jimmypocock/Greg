@@ -1,98 +1,138 @@
 /**
- * Canvas Editor Utilities
+ * ProseMirror Utilities
  *
- * Helper functions for converting between song structures and editor format.
+ * Conversion between ProseMirror documents and API data structures.
  */
 
-import { Song, LineType, SectionVersionSummary } from '@/types/song';
-import { ChordAnnotation } from './chordAnnotations';
+import { Node as ProseMirrorNode } from 'prosemirror-model';
+import { LineType, SectionType, CanvasSection, CanvasLine } from '@/types/song';
 
-// Info about which section a line belongs to
-export interface SectionLineInfo {
-  sectionId: string;
-  sectionIndex: number;
+/**
+ * Part data extracted from ProseMirror document.
+ */
+export interface PartData {
+  id: string;
+  type: SectionType;
   mainVersionId: string | null;
-  versions: SectionVersionSummary[];
-}
-
-// Result of converting song to text
-export interface SongToTextResult {
-  text: string;
-  chords: ChordAnnotation[];
-  lineTypes: Map<number, LineType>;
-  sectionMap: Map<number, SectionLineInfo>;
+  label: string;
+  lines: Array<{
+    text: string;
+    lineType: LineType;
+  }>;
 }
 
 /**
- * Convert song structure to plain text (no prefixes).
- * Returns text, chord annotations, initial line types, and section mapping.
+ * Extract part data from a ProseMirror document.
  */
-export function songToTextAndChords(song: Song): SongToTextResult {
-  const lines: string[] = [];
-  const chords: ChordAnnotation[] = [];
-  const lineTypes = new Map<number, LineType>();
-  const sectionMap = new Map<number, SectionLineInfo>();
-  let lineNumber = 1; // CodeMirror lines are 1-indexed
+export function docToParts(doc: ProseMirrorNode): PartData[] {
+  const parts: PartData[] = [];
 
-  for (let sectionIndex = 0; sectionIndex < song.sections.length; sectionIndex++) {
-    const section = song.sections[sectionIndex];
-    const sectionInfo: SectionLineInfo = {
-      sectionId: section.id,
-      sectionIndex,
-      mainVersionId: section.main_version_id,
-      versions: section.versions || [],
+  doc.forEach((partNode) => {
+    if (partNode.type.name !== 'part') return;
+
+    const part: PartData = {
+      id: partNode.attrs.id,
+      type: partNode.attrs.type,
+      mainVersionId: partNode.attrs.mainVersionId,
+      label: '',
+      lines: [],
     };
 
-    // Section header (just the name, no prefix)
-    const typeName = section.type.charAt(0).toUpperCase() + section.type.slice(1).replace('_', ' ');
-    const headerText =
-      section.number && section.number > 0 ? `${typeName} ${section.number}` : typeName;
-    lines.push(headerText);
-    lineTypes.set(lineNumber, LineType.SECTION_HEADER);
-    sectionMap.set(lineNumber, sectionInfo);
-    lineNumber++;
+    partNode.forEach((child) => {
+      if (child.type.name === 'label') {
+        part.label = child.textContent;
+      } else if (child.type.name === 'line') {
+        let text = child.textContent;
+        const lineType = child.attrs.lineType as LineType;
 
-    // Section lines
-    for (const line of section.lines) {
-      lines.push(line.text);
-      lineTypes.set(lineNumber, line.line_type || LineType.LYRIC);
-      sectionMap.set(lineNumber, sectionInfo);
-
-      // Extract chord placements from this line
-      if (line.chords && line.chords.length > 0) {
-        for (const placement of line.chords) {
-          chords.push({
-            line: lineNumber - 1, // 0-indexed for chord annotations
-            position: placement.position,
-            chord: placement.chord,
-          });
+        // Remove prefix from text for storage (prefix is just for editing)
+        if (lineType === LineType.CHORD && text.startsWith('> ')) {
+          text = text.slice(2);
+        } else if (lineType === LineType.ANNOTATION && text.startsWith('// ')) {
+          text = text.slice(3);
         }
+
+        part.lines.push({ text, lineType });
       }
+    });
 
-      lineNumber++;
-    }
+    parts.push(part);
+  });
 
-    // Empty line between sections
+  return parts;
+}
+
+/**
+ * Convert ProseMirror document to canvas save format.
+ */
+export function docToCanvasSections(doc: ProseMirrorNode): CanvasSection[] {
+  const parts = docToParts(doc);
+
+  return parts.map((part) => ({
+    type: part.type,
+    number: undefined, // We don't track number anymore, just label
+    lines: part.lines.map((line) => ({
+      text: line.text,
+      line_type: line.lineType,
+      chords: [], // Chords handled separately
+    })),
+  }));
+}
+
+/**
+ * Get raw text content from document (for search/export).
+ */
+export function docToText(doc: ProseMirrorNode): string {
+  const lines: string[] = [];
+
+  doc.forEach((partNode) => {
+    if (partNode.type.name !== 'part') return;
+
+    partNode.forEach((child) => {
+      if (child.type.name === 'label') {
+        lines.push(`# ${child.textContent}`);
+        lines.push('');
+      } else if (child.type.name === 'line') {
+        lines.push(child.textContent);
+      }
+    });
+
     lines.push('');
-    lineTypes.set(lineNumber, LineType.LYRIC);
-    // Don't map empty lines to sections
-    lineNumber++;
-  }
+  });
 
-  // If no sections, just return empty or raw input
-  if (lines.length === 0) {
-    return {
-      text: song.raw_input || '',
-      chords: [],
-      lineTypes: new Map(),
-      sectionMap: new Map(),
-    };
-  }
+  return lines.join('\n').trim();
+}
 
-  return {
-    text: lines.join('\n').trim(),
-    chords,
-    lineTypes,
-    sectionMap,
-  };
+/**
+ * Get all part IDs in document order.
+ */
+export function getPartIds(doc: ProseMirrorNode): string[] {
+  const ids: string[] = [];
+
+  doc.forEach((partNode) => {
+    if (partNode.type.name === 'part' && partNode.attrs.id) {
+      ids.push(partNode.attrs.id);
+    }
+  });
+
+  return ids;
+}
+
+/**
+ * Find a part node by ID.
+ */
+export function findPartById(
+  doc: ProseMirrorNode,
+  partId: string
+): { node: ProseMirrorNode; pos: number } | null {
+  let result: { node: ProseMirrorNode; pos: number } | null = null;
+  let pos = 0;
+
+  doc.forEach((partNode, offset) => {
+    if (partNode.type.name === 'part' && partNode.attrs.id === partId) {
+      result = { node: partNode, pos: offset + 1 }; // +1 for doc start
+    }
+  });
+
+  return result;
 }

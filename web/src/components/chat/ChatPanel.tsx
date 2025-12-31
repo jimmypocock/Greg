@@ -7,7 +7,7 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import type { ChatMessage as ChatMessageType } from '@/types/chat';
 
-interface AIChatPanelProps {
+interface ChatPanelProps {
   song: Song;
   onSongUpdated?: () => void; // Callback to refresh song data
 }
@@ -28,7 +28,7 @@ function isExplorationPhase(song: Song): boolean {
   return !hasRealContent;
 }
 
-export function AIChatPanel({ song, onSongUpdated }: AIChatPanelProps) {
+export function ChatPanel({ song, onSongUpdated }: ChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Handle song updates from the orchestrator

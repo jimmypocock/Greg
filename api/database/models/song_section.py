@@ -41,6 +41,7 @@ class SongSection(Base, TimestampMixin):
         nullable=False,
     )
     number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    label: Mapped[str | None] = mapped_column(String(200), nullable=True)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -59,10 +60,21 @@ class SongSection(Base, TimestampMixin):
     )
 
     def __repr__(self) -> str:
-        label = self.type.value
+        return f"<SongSection {self.display_label}>"
+
+    @property
+    def display_label(self) -> str:
+        """Get the display label for this section.
+
+        Returns the custom label if set, otherwise derives from type + number.
+        """
+        if self.label:
+            return self.label
+        # Derive from type + number
+        type_name = self.type.value.replace("_", " ").title()
         if self.number:
-            label += f" {self.number}"
-        return f"<SongSection {label}>"
+            return f"{type_name} {self.number}"
+        return type_name
 
     @property
     def main_version(self) -> "SectionVersion | None":

@@ -1,15 +1,21 @@
 /**
- * Canvas Editor Components
+ * Canvas - Song Editor Components
  *
- * A flat, document-style song editor.
+ * Exports:
+ * - CanvasPanel: Main panel component (self-contained with Yjs)
+ * - ProseMirrorEditor: Core editor component
+ * - songSchema: ProseMirror schema definition
+ * - Utility functions for document conversion
  */
 
-export { CanvasEditor } from './CanvasEditor';
-export { CanvasLine } from './CanvasLine';
-export { CanvasLineGutter } from './CanvasLineGutter';
-export { useCanvasEditor } from './useCanvasEditor';
-export { CodeMirrorCanvas } from './CodeMirrorCanvas';
-export { parseDocument, toApiFormat } from './parseDocument';
-export type { ParsedDocument, ParsedSection, ParsedLine } from './parseDocument';
-export type { ChordAnnotation } from './chordAnnotations';
-export * from './types';
+export { CanvasPanel } from './CanvasPanel';
+export { Canvas } from './Canvas';
+export { songSchema, createEmptyDoc, createPart } from './schema';
+export {
+  docToParts,
+  docToCanvasSections,
+  docToText,
+  getPartIds,
+  findPartById,
+  type PartData,
+} from './utils';

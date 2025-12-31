@@ -15,12 +15,15 @@ Schema:
       'status': str
     }
     'canvas': Y.Text
-      Raw text content for the canvas editor.
+      Raw text content for the canvas editor (CodeMirror).
       Format:
         # Section Type
         Lyric line
         > Chord line
         // Annotation
+    'prosemirror': Y.XmlFragment
+      Block-based content for ProseMirror editor.
+      See prosemirror_yjs.py for the XmlFragment structure.
     'sections': Y.Array<Y.Map> [
       Y.Map {
         'id': str (section UUID)
@@ -45,9 +48,10 @@ Schema:
 import logging
 from uuid import UUID, uuid4
 
-from pycrdt import Doc, Array, Map, Text
+from pycrdt import Doc, Array, Map, Text, XmlFragment
 
 from api.enums import SectionType, LineType
+from api.services.prosemirror_yjs import sql_song_to_prosemirror_doc, create_empty_prosemirror_doc
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +117,15 @@ def create_empty_yjs_doc(song_id: UUID, title: str = "Untitled") -> Doc:
     # Initialize canvas text (empty) - use doc.get() for proper integration
     doc.get("canvas", type=Text)
 
+    # Initialize prosemirror XmlFragment with empty structure
+    pm_doc = create_empty_prosemirror_doc(song_id, title)
+    pm_fragment = pm_doc.get("prosemirror", type=XmlFragment)
+    # Copy the prosemirror structure to this doc
+    with doc.transaction():
+        target_fragment = doc.get("prosemirror", type=XmlFragment)
+        # Apply the pm_doc update to get the structure
+        doc.apply_update(pm_doc.get_update())
+
     # Initialize empty sections array
     doc["sections"] = Array()
 
@@ -149,6 +162,11 @@ def sql_song_to_yjs(song) -> Doc:
             canvas += canvas_text
 
     logger.info(f"Created Yjs doc with canvas: {len(canvas_text)} chars")
+
+    # Set prosemirror XmlFragment - block-based structure for ProseMirror editor
+    pm_doc = sql_song_to_prosemirror_doc(song)
+    # Apply the prosemirror doc update to include its structure
+    doc.apply_update(pm_doc.get_update())
 
     # Set sections - integrate into doc first
     doc["sections"] = sections_array = Array()

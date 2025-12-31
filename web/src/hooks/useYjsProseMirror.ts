@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * Yjs Canvas Hook
+ * Yjs ProseMirror Hook
  *
- * Provides Yjs Y.Text binding for CodeMirror collaborative editing.
- * Uses the 'canvas' field from the Yjs document for real-time text sync.
+ * Provides Yjs Y.XmlFragment binding for ProseMirror collaborative editing.
+ * Uses the 'prosemirror' field from the Yjs document for real-time block sync.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -23,9 +23,9 @@ function getWebSocketUrl(): string {
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-export interface YjsCanvasState {
-  /** The Y.Text for the canvas content */
-  yText: Y.Text | null;
+export interface YjsProseMirrorState {
+  /** The Y.XmlFragment for the prosemirror content */
+  yXmlFragment: Y.XmlFragment | null;
   /** The Yjs document */
   doc: Y.Doc | null;
   /** WebSocket provider (for awareness) */
@@ -44,75 +44,73 @@ export interface YjsCanvasState {
   disconnect: () => void;
 }
 
-export interface UseYjsCanvasOptions {
+export interface UseYjsProseMirrorOptions {
   /** Song ID to connect to */
   songId: string;
   /** Whether to auto-connect (default: true) */
   autoConnect?: boolean;
-  /** Callback when document syncs */
-  onSync?: (yText: Y.Text, doc: Y.Doc) => void;
+  /** Callback when document syncs - called synchronously, use for editor creation */
+  onSync?: (yXmlFragment: Y.XmlFragment, doc: Y.Doc) => void;
   /** Callback when connection status changes */
   onStatusChange?: (status: ConnectionStatus) => void;
 }
 
 /**
- * Hook for managing Yjs collaborative editing for the canvas.
- *
- * @example
- * ```tsx
- * const { yText, provider, status } = useYjsCanvas({
- *   songId: song.id,
- *   onSync: (yText) => console.log('Canvas synced'),
- * });
- *
- * if (status === 'connected' && yText && provider) {
- *   // Use yCollab(yText, provider.awareness) in CodeMirror
- * }
- * ```
+ * Hook for managing Yjs collaborative editing with ProseMirror.
  */
-export function useYjsCanvas({
+export function useYjsProseMirror({
   songId,
   autoConnect = true,
   onSync,
   onStatusChange,
-}: UseYjsCanvasOptions): YjsCanvasState {
+}: UseYjsProseMirrorOptions): YjsProseMirrorState {
   const { accessToken, isAuthenticated } = useAuth();
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [isSynced, setIsSynced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectedUsers, setConnectedUsers] = useState(0);
-  const [yText, setYText] = useState<Y.Text | null>(null);
+  const [yXmlFragment, setYXmlFragment] = useState<Y.XmlFragment | null>(null);
 
   const docRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
   const mountedRef = useRef(true);
 
-  // Update status and call callback
-  const updateStatus = useCallback(
-    (newStatus: ConnectionStatus) => {
-      if (mountedRef.current) {
-        setStatus(newStatus);
-        onStatusChange?.(newStatus);
-      }
-    },
-    [onStatusChange]
-  );
+  // Use refs for callbacks to avoid effect re-runs
+  const onSyncRef = useRef(onSync);
+  const onStatusChangeRef = useRef(onStatusChange);
+  onSyncRef.current = onSync;
+  onStatusChangeRef.current = onStatusChange;
 
-  // Connect to WebSocket
+  // Disconnect function (stable - no dependencies)
+  const disconnect = useCallback(() => {
+    if (providerRef.current) {
+      providerRef.current.destroy();
+      providerRef.current = null;
+    }
+    if (docRef.current) {
+      docRef.current.destroy();
+      docRef.current = null;
+    }
+    setYXmlFragment(null);
+    setStatus('disconnected');
+    setIsSynced(false);
+  }, []);
+
+  // Connect function (stable - uses refs for callbacks)
   const connect = useCallback(() => {
-    if (!songId || !accessToken || !isAuthenticated) {
+    // These are read at call time, not captured in closure
+    const token = accessToken;
+    const authenticated = isAuthenticated;
+
+    if (!songId || !token || !authenticated) {
       return;
     }
 
     // Clean up existing connection
-    if (providerRef.current) {
-      providerRef.current.destroy();
-    }
-    if (docRef.current) {
-      docRef.current.destroy();
-    }
+    disconnect();
 
-    updateStatus('connecting');
+    setStatus('connecting');
+    onStatusChangeRef.current?.('connecting');
     setError(null);
     setIsSynced(false);
 
@@ -120,8 +118,8 @@ export function useYjsCanvas({
     const doc = new Y.Doc();
     docRef.current = doc;
 
-    // Get the canvas Y.Text reference (but don't expose until synced)
-    const canvasText = doc.getText('canvas');
+    // Get the prosemirror XmlFragment reference
+    const pmFragment = doc.getXmlFragment('prosemirror');
 
     // Build WebSocket URL with token
     const wsUrl = getWebSocketUrl();
@@ -134,7 +132,7 @@ export function useYjsCanvas({
         roomName,
         doc,
         {
-          params: { token: accessToken },
+          params: { token },
           connect: true,
         }
       );
@@ -145,47 +143,29 @@ export function useYjsCanvas({
       provider.on('status', (event: { status: string }) => {
         if (!mountedRef.current) return;
 
-        console.log('[YjsCanvas] WebSocket status:', event.status, {
-          wsconnected: provider.wsconnected,
-          synced: provider.synced,
-        });
-
         if (event.status === 'connected') {
-          updateStatus('connected');
+          setStatus('connected');
+          onStatusChangeRef.current?.('connected');
         } else if (event.status === 'disconnected') {
-          updateStatus('disconnected');
+          setStatus('disconnected');
+          onStatusChangeRef.current?.('disconnected');
         }
       });
 
-      // Handle sync - only expose yText after sync to avoid cursor position errors
+      // Handle sync - only expose yXmlFragment after sync
       provider.on('sync', (synced: boolean) => {
         if (!mountedRef.current) return;
 
-        console.log('[YjsCanvas] Sync event:', synced, 'canvasText.length:', canvasText.length);
-        console.log('[YjsCanvas] Canvas content:', JSON.stringify(canvasText.toString().substring(0, 200)));
-
         if (synced) {
-          // Now expose yText - CodeMirror will remount with fresh state via key prop
-          setYText(canvasText);
+          setYXmlFragment(pmFragment);
           setIsSynced(true);
-          onSync?.(canvasText, doc);
+          onSyncRef.current?.(pmFragment, doc);
         }
-      });
-
-      // Log Y.Doc updates to see if changes are being tracked
-      doc.on('update', (update: Uint8Array, origin: unknown) => {
-        console.log('[YjsCanvas] Doc update:', {
-          updateSize: update.length,
-          origin: origin === provider ? 'remote' : origin === null ? 'local' : 'other',
-          canvasLength: canvasText.length,
-          wsConnected: provider.wsconnected,
-        });
       });
 
       // Handle awareness (connected users)
       provider.awareness.on('change', () => {
         if (!mountedRef.current) return;
-
         const states = provider.awareness.getStates();
         setConnectedUsers(states.size);
       });
@@ -193,49 +173,37 @@ export function useYjsCanvas({
       // Handle connection error
       provider.on('connection-error', (event: Event) => {
         if (!mountedRef.current) return;
-
         console.error('Yjs WebSocket connection error:', event);
         setError('Connection failed');
-        updateStatus('error');
+        setStatus('error');
+        onStatusChangeRef.current?.('error');
       });
 
       // Handle connection close
       provider.on('connection-close', (event: CloseEvent | null) => {
         if (!mountedRef.current) return;
-
         if (event?.code === 1008) {
           setError('Authentication failed');
-          updateStatus('error');
+          setStatus('error');
+          onStatusChangeRef.current?.('error');
         }
       });
     } catch (err) {
       console.error('Failed to create Yjs provider:', err);
       setError(err instanceof Error ? err.message : 'Connection failed');
-      updateStatus('error');
+      setStatus('error');
+      onStatusChangeRef.current?.('error');
     }
-  }, [songId, accessToken, isAuthenticated, updateStatus, onSync]);
-
-  // Disconnect from WebSocket
-  const disconnect = useCallback(() => {
-    if (providerRef.current) {
-      providerRef.current.destroy();
-      providerRef.current = null;
-    }
-    if (docRef.current) {
-      docRef.current.destroy();
-      docRef.current = null;
-    }
-    setYText(null);
-    updateStatus('disconnected');
-  }, [updateStatus]);
+  }, [songId, accessToken, isAuthenticated, disconnect]);
 
   // Reconnect
   const reconnect = useCallback(() => {
     disconnect();
-    connect();
+    // Small delay to ensure cleanup completes
+    setTimeout(() => connect(), 50);
   }, [connect, disconnect]);
 
-  // Auto-connect on mount
+  // Auto-connect on mount - only depends on stable values
   useEffect(() => {
     mountedRef.current = true;
 
@@ -250,7 +218,7 @@ export function useYjsCanvas({
   }, [autoConnect, songId, accessToken, isAuthenticated, connect, disconnect]);
 
   return {
-    yText,
+    yXmlFragment,
     doc: docRef.current,
     provider: providerRef.current,
     status,

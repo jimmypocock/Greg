@@ -1,0 +1,274 @@
+/**
+ * Canvas Editor Styles
+ *
+ * Styles for the ProseMirror-based song editor.
+ * Uses CSS ::before pseudo-elements for line type gutters.
+ */
+
+.pm-canvas {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.pm-hints {
+  font-size: 12px;
+  color: #9ca3af;
+  display: flex;
+  gap: 16px;
+  padding: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dark .pm-hints {
+  border-color: #374151;
+}
+
+.pm-hints code {
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.dark .pm-hints code {
+  background: #374151;
+}
+
+.pm-editor-container {
+  flex: 1;
+  background: white;
+  overflow-y: auto;
+}
+
+.dark .pm-editor-container {
+  background: #1a1a1a;
+}
+
+.pm-editor {
+  outline: none;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 0 0 16px 0;
+}
+
+.pm-editor .ProseMirror {
+  outline: none;
+}
+
+/* Part wrapper - invisible */
+.pm-part {
+  margin: 0;
+  padding: 0;
+}
+
+/* Line wrapper - with CSS ::before gutter */
+.pm-line-wrapper {
+  position: relative;
+  padding-left: 33px;
+}
+
+/* Gutter via ::before pseudo-element */
+.pm-line-wrapper::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-right: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  opacity: 0.6;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.pm-line-wrapper:hover::before {
+  background: #f3f4f6;
+  opacity: 1;
+}
+
+.dark .pm-line-wrapper::before {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+.dark .pm-line-wrapper:hover::before {
+  background: #374151;
+}
+
+/* Line type specific gutter icons */
+.pm-line-wrapper[data-line-type="SECTION_HEADER"]::before {
+  content: '#';
+  color: #333;
+}
+
+.pm-line-wrapper[data-line-type="CHORD"]::before {
+  content: '>';
+  color: #2563eb;
+}
+
+.pm-line-wrapper[data-line-type="ANNOTATION"]::before {
+  content: '//';
+  color: #6b7280;
+}
+
+.pm-line-wrapper[data-line-type="LYRIC"]::before {
+  content: '';
+  color: #9ca3af;
+}
+
+.dark .pm-line-wrapper[data-line-type="SECTION_HEADER"]::before {
+  color: #e5e5e5;
+}
+
+.dark .pm-line-wrapper[data-line-type="CHORD"]::before {
+  color: #60a5fa;
+}
+
+/* Label wrapper - with CSS ::before gutter */
+.pm-label-wrapper {
+  position: relative;
+  padding-left: 33px;
+}
+
+.pm-label-wrapper::before {
+  content: '#';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  color: #333;
+  opacity: 0.6;
+}
+
+.dark .pm-label-wrapper::before {
+  background: #1f2937;
+  border-color: #374151;
+  color: #e5e5e5;
+}
+
+/* Content areas */
+.pm-line-content {
+  padding: 2px 8px;
+  min-height: 24px;
+}
+
+.pm-label-content {
+  padding: 2px 8px;
+  font-weight: 700;
+  color: #333;
+}
+
+.dark .pm-label-content {
+  color: #e5e5e5;
+}
+
+/* Line type styles */
+.pm-line-lyric {
+  color: #333;
+}
+
+.dark .pm-line-lyric {
+  color: #e5e5e5;
+}
+
+.pm-line-section_header {
+  font-weight: 700;
+  font-size: 1.1em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #333;
+}
+
+.dark .pm-line-section_header {
+  color: #e5e5e5;
+}
+
+.pm-line-chord {
+  color: #2563eb;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+  letter-spacing: 0.1em;
+}
+
+.dark .pm-line-chord {
+  color: #60a5fa;
+}
+
+.pm-line-annotation {
+  color: #6b7280;
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.dark .pm-line-annotation {
+  color: #9ca3af;
+}
+
+/* Hidden prefix */
+.pm-hidden-prefix {
+  font-size: 0;
+  width: 0;
+  display: inline-block;
+  overflow: hidden;
+}
+
+/* ProseMirror cursor */
+.pm-editor .ProseMirror-cursor {
+  border-left-color: #3b82f6;
+}
+
+/* Selection */
+.pm-editor .ProseMirror ::selection {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+/* Gap cursor */
+.ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+}
+
+.ProseMirror-gapcursor:after {
+  content: '';
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 20px;
+  border-top: 1px solid black;
+  animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+}
+
+@keyframes ProseMirror-cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
+/* Drop cursor */
+.ProseMirror-dropcursor {
+  border-left: 2px solid #3b82f6;
+}
