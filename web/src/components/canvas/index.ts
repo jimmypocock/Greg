@@ -3,19 +3,19 @@
  *
  * Exports:
  * - CanvasPanel: Main panel component (self-contained with Yjs)
- * - ProseMirrorEditor: Core editor component
+ * - Canvas: Core editor component
  * - songSchema: ProseMirror schema definition
  * - Utility functions for document conversion
  */
 
 export { CanvasPanel } from './CanvasPanel';
 export { Canvas } from './Canvas';
-export { songSchema, createEmptyDoc, createPart } from './schema';
+export { songSchema, createEmptyDoc, createLine } from './schema';
 export {
-  docToParts,
-  docToCanvasSections,
+  docToLines,
+  docToCanvasLines,
   docToText,
-  getPartIds,
-  findPartById,
-  type PartData,
+  getLineIds,
+  findLineById,
+  type LineData,
 } from './utils';

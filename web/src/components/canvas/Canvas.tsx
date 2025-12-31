@@ -3,13 +3,14 @@
 /**
  * Canvas - Song Editor
  *
- * A blank canvas editor using ProseMirror's block structure for stable part IDs.
+ * A flat line-based editor using ProseMirror.
  *
  * Features:
  * - NodeView-based gutters (perfect alignment, handles line wrapping)
  * - Line type cycling via gutter click
- * - Prefix shortcuts: # section, > chord, // annotation
+ * - Prefix shortcuts: # header, > chord, // annotation
  * - Real-time collaboration via Yjs
+ * - Flat structure: doc → line+ (sections are external metadata)
  */
 
 import { useEffect, useRef } from 'react';
@@ -45,58 +46,63 @@ interface CanvasProps {
 
 /**
  * Convert a Song object to ProseMirror document.
+ * Creates a flat list of lines - sections become header lines.
  */
 function songToDoc(song: Song): ProseMirrorNode {
   if (song.sections.length === 0) {
     return createEmptyDoc();
   }
 
-  const parts = song.sections.map((section) => {
+  const allLines: ProseMirrorNode[] = [];
+
+  song.sections.forEach((section) => {
+    // Create section header line
     const labelText =
       section.type.replace('_', ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) +
       (section.number ? ` ${section.number}` : '');
 
-    const lines = section.lines.map((line) => {
+    if (labelText) {
+      allLines.push(
+        songSchema.node(
+          'line',
+          { id: crypto.randomUUID(), lineType: LineType.SECTION_HEADER },
+          [songSchema.text('# ' + labelText)]
+        )
+      );
+    }
+
+    // Create content lines
+    section.lines.forEach((line) => {
       let text = line.text;
       if (line.line_type === LineType.CHORD && !text.startsWith('> ')) {
         text = '> ' + text;
       } else if (line.line_type === LineType.ANNOTATION && !text.startsWith('// ')) {
         text = '// ' + text;
+      } else if (line.line_type === LineType.SECTION_HEADER && !text.startsWith('# ')) {
+        text = '# ' + text;
       }
 
-      return songSchema.node(
-        'line',
-        { lineType: line.line_type },
-        text ? [songSchema.text(text)] : []
+      allLines.push(
+        songSchema.node(
+          'line',
+          { id: line.id || crypto.randomUUID(), lineType: line.line_type },
+          text ? [songSchema.text(text)] : []
+        )
       );
     });
-
-    const lineNodes =
-      lines.length > 0
-        ? lines
-        : [songSchema.node('line', { lineType: LineType.LYRIC })];
-
-    const children = labelText
-      ? [songSchema.node('label', null, [songSchema.text(labelText)]), ...lineNodes]
-      : lineNodes;
-
-    return songSchema.node(
-      'part',
-      {
-        id: section.id,
-        type: section.type,
-        mainVersionId: section.main_version_id,
-      },
-      children
-    );
   });
 
-  return songSchema.node('doc', null, parts);
+  // Ensure at least one line
+  if (allLines.length === 0) {
+    return createEmptyDoc();
+  }
+
+  return songSchema.node('doc', null, allLines);
 }
 
 /**
  * Plugin to detect prefix typing and convert line types.
- * All prefixes work the same way - they just change the line type.
+ * Also assigns IDs to new lines that don't have them.
  */
 function prefixDetectionPlugin() {
   return new Plugin({
@@ -119,24 +125,36 @@ function prefixDetectionPlugin() {
 
         const text = node.textContent;
         const currentType = node.attrs.lineType;
+        const currentId = node.attrs.id;
 
+        // Track what needs to change
+        let newAttrs: { id?: string; lineType?: LineType } | null = null;
+
+        // Assign ID if missing
+        if (!currentId) {
+          newAttrs = { id: crypto.randomUUID() };
+        }
+
+        // Detect line type from prefix
         if (headerPattern.test(text) && currentType !== LineType.SECTION_HEADER) {
-          if (!tr) tr = newState.tr;
-          tr.setNodeMarkup(pos, undefined, { lineType: LineType.SECTION_HEADER });
+          newAttrs = { ...newAttrs, lineType: LineType.SECTION_HEADER };
         } else if (chordPattern.test(text) && currentType !== LineType.CHORD) {
-          if (!tr) tr = newState.tr;
-          tr.setNodeMarkup(pos, undefined, { lineType: LineType.CHORD });
+          newAttrs = { ...newAttrs, lineType: LineType.CHORD };
         } else if (annotationPattern.test(text) && currentType !== LineType.ANNOTATION) {
-          if (!tr) tr = newState.tr;
-          tr.setNodeMarkup(pos, undefined, { lineType: LineType.ANNOTATION });
+          newAttrs = { ...newAttrs, lineType: LineType.ANNOTATION };
         } else if (
           !headerPattern.test(text) &&
           !chordPattern.test(text) &&
           !annotationPattern.test(text) &&
           currentType !== LineType.LYRIC
         ) {
+          newAttrs = { ...newAttrs, lineType: LineType.LYRIC };
+        }
+
+        // Apply changes if needed
+        if (newAttrs) {
           if (!tr) tr = newState.tr;
-          tr.setNodeMarkup(pos, undefined, { lineType: LineType.LYRIC });
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...newAttrs });
         }
       });
 
@@ -195,7 +213,7 @@ function hidePrefixPlugin() {
  */
 function clipboardTextParser(
   text: string,
-  $context: ResolvedPos,
+  _$context: ResolvedPos,
   _plain: boolean,
   _view: EditorView
 ): Slice {
@@ -214,24 +232,12 @@ function clipboardTextParser(
 
     return songSchema.node(
       'line',
-      { lineType },
+      { id: crypto.randomUUID(), lineType },
       lineText ? [songSchema.text(lineText)] : []
     );
   });
 
-  // If pasting into a part, just return the lines
-  if ($context.parent.type.name === 'part') {
-    return new Slice(Fragment.from(lineNodes), 0, 0);
-  }
-
-  // Otherwise wrap in a part node
-  const part = songSchema.node(
-    'part',
-    { id: crypto.randomUUID(), type: 'VERSE', mainVersionId: null },
-    lineNodes
-  );
-
-  return new Slice(Fragment.from(part), 0, 0);
+  return new Slice(Fragment.from(lineNodes), 0, 0);
 }
 
 export function Canvas({
@@ -283,52 +289,6 @@ export function Canvas({
       state,
       nodeViews: createNodeViews(),
       clipboardTextParser,
-      handleDrop(view, event, slice, moved) {
-        // Find the drop position
-        const coords = { left: event.clientX, top: event.clientY };
-        const pos = view.posAtCoords(coords);
-        if (!pos) return false;
-
-        // Resolve the position and find the nearest line boundary
-        const $pos = view.state.doc.resolve(pos.pos);
-
-        // Find the line node we're dropping into/near
-        let insertPos: number | null = null;
-
-        // If we're inside a line, find its end position to insert after it
-        for (let d = $pos.depth; d > 0; d--) {
-          const node = $pos.node(d);
-          if (node.type.name === 'line') {
-            // Insert after this line
-            insertPos = $pos.after(d);
-            break;
-          } else if (node.type.name === 'part') {
-            // We're in a part but not in a line - insert at the position
-            insertPos = pos.pos;
-            break;
-          }
-        }
-
-        // If we didn't find a good position, let default handling occur
-        if (insertPos === null) return false;
-
-        // Create transaction to insert at line boundary
-        const tr = view.state.tr;
-
-        // If this was a move operation, delete the original content first
-        if (moved) {
-          tr.deleteSelection();
-        }
-
-        // Map the insert position after any deletions
-        const mappedPos = tr.mapping.map(insertPos);
-
-        // Insert the content
-        tr.insert(mappedPos, slice.content);
-
-        view.dispatch(tr);
-        return true; // We handled the drop
-      },
       dispatchTransaction(tr) {
         if (!viewRef.current) return;
 

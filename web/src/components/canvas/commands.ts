@@ -5,13 +5,12 @@
  */
 
 import { Command, TextSelection } from 'prosemirror-state';
-import { LineType, SectionType } from '@/types/song';
-import { songSchema, createPart } from './schema';
+import { LineType } from '@/types/song';
+import { songSchema } from './schema';
 
 /**
  * Handle Enter key in the editor.
- * - In a line: create new line
- * - In empty last line at end of part: create new part
+ * Creates a new line after the current one.
  */
 export const handleEnter: Command = (state, dispatch) => {
   const { $from } = state.selection;
@@ -21,7 +20,10 @@ export const handleEnter: Command = (state, dispatch) => {
   if (parent.type.name === 'line') {
     if (!dispatch) return true;
 
-    const newLine = songSchema.node('line', { lineType: LineType.LYRIC });
+    const newLine = songSchema.node('line', {
+      id: crypto.randomUUID(),
+      lineType: LineType.LYRIC,
+    });
 
     // Split at cursor or insert after
     const tr = state.tr;
@@ -32,36 +34,12 @@ export const handleEnter: Command = (state, dispatch) => {
     return true;
   }
 
-  // If in a label, move to first line (or create one)
-  if (parent.type.name === 'label') {
-    if (!dispatch) return true;
-
-    const partNode = $from.node(-1);
-    const partPos = $from.before(-1);
-
-    // Find the first line in this part
-    let linePos: number | null = null;
-    partNode.forEach((child, offset) => {
-      if (child.type.name === 'line' && linePos === null) {
-        linePos = partPos + 1 + offset;
-      }
-    });
-
-    if (linePos !== null) {
-      const tr = state.tr;
-      tr.setSelection(TextSelection.near(tr.doc.resolve(linePos + 1)));
-      dispatch(tr.scrollIntoView());
-      return true;
-    }
-  }
-
   return false;
 };
 
 /**
  * Handle Backspace at start of line.
- * - If line has a prefix, remove it and reset to lyric type
- * - If line is empty and at start of part, potentially merge with previous part
+ * If line has a prefix, remove it and reset to lyric type.
  */
 export const handleBackspaceAtLineStart: Command = (state, dispatch) => {
   const { $from, empty } = state.selection;
@@ -78,12 +56,12 @@ export const handleBackspaceAtLineStart: Command = (state, dispatch) => {
   const lineText = parent.textContent;
   const lineType = parent.attrs.lineType;
 
-  // If line has a prefix (>, //), remove it and reset to lyric
+  // If line has a prefix (>, //, #), remove it and reset to lyric
   if (lineType === LineType.CHORD && lineText.startsWith('> ')) {
     if (!dispatch) return true;
     const tr = state.tr;
     tr.delete($from.pos, $from.pos + 2);
-    tr.setNodeMarkup($from.before(), undefined, { lineType: LineType.LYRIC });
+    tr.setNodeMarkup($from.before(), undefined, { ...parent.attrs, lineType: LineType.LYRIC });
     dispatch(tr.scrollIntoView());
     return true;
   }
@@ -92,7 +70,16 @@ export const handleBackspaceAtLineStart: Command = (state, dispatch) => {
     if (!dispatch) return true;
     const tr = state.tr;
     tr.delete($from.pos, $from.pos + 3);
-    tr.setNodeMarkup($from.before(), undefined, { lineType: LineType.LYRIC });
+    tr.setNodeMarkup($from.before(), undefined, { ...parent.attrs, lineType: LineType.LYRIC });
+    dispatch(tr.scrollIntoView());
+    return true;
+  }
+
+  if (lineType === LineType.SECTION_HEADER && lineText.startsWith('# ')) {
+    if (!dispatch) return true;
+    const tr = state.tr;
+    tr.delete($from.pos, $from.pos + 2);
+    tr.setNodeMarkup($from.before(), undefined, { ...parent.attrs, lineType: LineType.LYRIC });
     dispatch(tr.scrollIntoView());
     return true;
   }
@@ -114,6 +101,10 @@ export function checkPrefixConversion(state: ReturnType<typeof import('prosemirr
   const currentType = parent.attrs.lineType;
 
   // Check for prefix patterns
+  if (text.startsWith('# ') && currentType !== LineType.SECTION_HEADER) {
+    return { lineType: LineType.SECTION_HEADER };
+  }
+
   if (text.startsWith('> ') && currentType !== LineType.CHORD) {
     return { lineType: LineType.CHORD };
   }
@@ -122,70 +113,15 @@ export function checkPrefixConversion(state: ReturnType<typeof import('prosemirr
     return { lineType: LineType.ANNOTATION };
   }
 
-  // No prefix but type is set? Reset to lyric only if it was explicitly a prefix type
-  if (!text.startsWith('> ') && !text.startsWith('// ') && currentType !== LineType.LYRIC) {
+  // No prefix but type is set? Reset to lyric
+  if (
+    !text.startsWith('# ') &&
+    !text.startsWith('> ') &&
+    !text.startsWith('// ') &&
+    currentType !== LineType.LYRIC
+  ) {
     return { lineType: LineType.LYRIC };
   }
 
   return null;
 }
-
-/**
- * Add a new part after the current one.
- */
-export const addPartAfterCurrent: Command = (state, dispatch) => {
-  const { $from } = state.selection;
-
-  // Find the part we're in
-  let depth = $from.depth;
-  while (depth > 0 && $from.node(depth).type.name !== 'part') {
-    depth--;
-  }
-
-  if (depth === 0) return false;
-
-  const partPos = $from.after(depth);
-  const newPart = createPart('New Part', SectionType.VERSE);
-
-  if (!dispatch) return true;
-
-  const tr = state.tr;
-  tr.insert(partPos, newPart);
-
-  // Move cursor to the label of the new part
-  const labelPos = partPos + 2; // After part start and into label
-  tr.setSelection(TextSelection.near(tr.doc.resolve(labelPos)));
-  dispatch(tr.scrollIntoView());
-
-  return true;
-};
-
-/**
- * Delete the current part (if there's more than one).
- */
-export const deleteCurrentPart: Command = (state, dispatch) => {
-  const { $from } = state.selection;
-
-  // Find the part we're in
-  let depth = $from.depth;
-  while (depth > 0 && $from.node(depth).type.name !== 'part') {
-    depth--;
-  }
-
-  if (depth === 0) return false;
-
-  // Don't delete if it's the only part
-  const doc = state.doc;
-  if (doc.childCount <= 1) return false;
-
-  const partStart = $from.before(depth);
-  const partEnd = $from.after(depth);
-
-  if (!dispatch) return true;
-
-  const tr = state.tr;
-  tr.delete(partStart, partEnd);
-  dispatch(tr.scrollIntoView());
-
-  return true;
-};

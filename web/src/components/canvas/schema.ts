@@ -3,62 +3,25 @@
  *
  * Structure:
  *   doc
- *   └── part+ (id, type, mainVersionId)
- *       ├── label (the part's name: "Verse 1", "Chorus", etc.)
- *       └── line* (lyrics, chords, annotations)
+ *   └── line+ (flat list of lines, each with id and type)
+ *
+ * Line types: LYRIC, CHORD, ANNOTATION, SECTION_HEADER
+ * Sections/parts are external metadata, not document structure.
  */
 
 import { Schema, NodeSpec, MarkSpec } from 'prosemirror-model';
-import { SectionType, LineType } from '@/types/song';
+import { LineType } from '@/types/song';
 
 // Node specifications
 
 const doc: NodeSpec = {
-  content: 'part+',
-};
-
-const part: NodeSpec = {
-  content: 'label? line+',
-  attrs: {
-    id: { default: null },
-    type: { default: SectionType.VERSE },
-    mainVersionId: { default: null },
-  },
-  draggable: true,
-  parseDOM: [
-    {
-      tag: 'div.part',
-      getAttrs: (dom) => {
-        const el = dom as HTMLElement;
-        return {
-          id: el.getAttribute('data-id'),
-          type: el.getAttribute('data-type') || SectionType.VERSE,
-          mainVersionId: el.getAttribute('data-main-version-id'),
-        };
-      },
-    },
-  ],
-  toDOM: (node) => [
-    'div',
-    {
-      class: `part part-${node.attrs.type.toLowerCase()}`,
-      'data-id': node.attrs.id,
-      'data-type': node.attrs.type,
-      'data-main-version-id': node.attrs.mainVersionId,
-    },
-    0,
-  ],
-};
-
-const label: NodeSpec = {
-  content: 'text*',
-  parseDOM: [{ tag: 'div.part-label' }],
-  toDOM: () => ['div', { class: 'part-label' }, 0],
+  content: 'line+',
 };
 
 const line: NodeSpec = {
   content: 'text*',
   attrs: {
+    id: { default: null },
     lineType: { default: LineType.LYRIC },
   },
   parseDOM: [
@@ -67,6 +30,7 @@ const line: NodeSpec = {
       getAttrs: (dom) => {
         const el = dom as HTMLElement;
         return {
+          id: el.getAttribute('data-id'),
           lineType: el.getAttribute('data-line-type') || LineType.LYRIC,
         };
       },
@@ -76,6 +40,7 @@ const line: NodeSpec = {
     'div',
     {
       class: `line line-${node.attrs.lineType.toLowerCase()}`,
+      'data-id': node.attrs.id,
       'data-line-type': node.attrs.lineType,
     },
     0,
@@ -95,8 +60,6 @@ const marks: { [key: string]: MarkSpec } = {};
 export const songSchema = new Schema({
   nodes: {
     doc,
-    part,
-    label,
     line,
     text,
   },
@@ -106,42 +69,27 @@ export const songSchema = new Schema({
 // Helper functions
 
 /**
- * Create an empty document with a single part.
+ * Create an empty document with a single line.
  */
 export function createEmptyDoc() {
-  const id = crypto.randomUUID();
   return songSchema.node('doc', null, [
-    songSchema.node('part', { id, type: SectionType.VERSE, mainVersionId: null }, [
-      songSchema.node('line', { lineType: LineType.LYRIC }),
-    ]),
+    songSchema.node('line', { id: crypto.randomUUID(), lineType: LineType.LYRIC }),
   ]);
 }
 
 /**
- * Create a part node with given content.
+ * Create a line node.
  */
-export function createPart(
-  label: string | null = null,
-  type: SectionType = SectionType.VERSE,
-  lines: Array<{ text: string; lineType: LineType }> = []
+export function createLine(
+  text: string = '',
+  lineType: LineType = LineType.LYRIC,
+  id: string | null = null
 ) {
-  const id = crypto.randomUUID();
-  const lineNodes =
-    lines.length > 0
-      ? lines.map((l) =>
-          songSchema.node(
-            'line',
-            { lineType: l.lineType },
-            l.text ? [songSchema.text(l.text)] : []
-          )
-        )
-      : [songSchema.node('line', { lineType: LineType.LYRIC })];
-
-  const children = label
-    ? [songSchema.node('label', null, [songSchema.text(label)]), ...lineNodes]
-    : lineNodes;
-
-  return songSchema.node('part', { id, type, mainVersionId: null }, children);
+  return songSchema.node(
+    'line',
+    { id: id || crypto.randomUUID(), lineType },
+    text ? [songSchema.text(text)] : []
+  );
 }
 
 export type { NodeSpec, MarkSpec };
