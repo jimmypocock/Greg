@@ -15,7 +15,7 @@
 import { useEffect, useRef } from 'react';
 import { EditorState, Transaction, Plugin, PluginKey } from 'prosemirror-state';
 import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
-import { Node as ProseMirrorNode } from 'prosemirror-model';
+import { Node as ProseMirrorNode, Slice, Fragment, ResolvedPos } from 'prosemirror-model';
 import { keymap } from 'prosemirror-keymap';
 import { baseKeymap } from 'prosemirror-commands';
 import { dropCursor } from 'prosemirror-dropcursor';
@@ -189,6 +189,51 @@ function hidePrefixPlugin() {
   });
 }
 
+/**
+ * Parse pasted plain text into proper line nodes.
+ * Splits text by newlines and creates a line node for each.
+ */
+function clipboardTextParser(
+  text: string,
+  $context: ResolvedPos,
+  _plain: boolean,
+  _view: EditorView
+): Slice {
+  const lines = text.split(/\r?\n/);
+
+  const lineNodes = lines.map((lineText) => {
+    // Determine line type based on prefix
+    let lineType = LineType.LYRIC;
+    if (/^#\s/.test(lineText)) {
+      lineType = LineType.SECTION_HEADER;
+    } else if (/^>\s/.test(lineText)) {
+      lineType = LineType.CHORD;
+    } else if (/^\/\/\s/.test(lineText)) {
+      lineType = LineType.ANNOTATION;
+    }
+
+    return songSchema.node(
+      'line',
+      { lineType },
+      lineText ? [songSchema.text(lineText)] : []
+    );
+  });
+
+  // If pasting into a part, just return the lines
+  if ($context.parent.type.name === 'part') {
+    return new Slice(Fragment.from(lineNodes), 0, 0);
+  }
+
+  // Otherwise wrap in a part node
+  const part = songSchema.node(
+    'part',
+    { id: crypto.randomUUID(), type: 'VERSE', mainVersionId: null },
+    lineNodes
+  );
+
+  return new Slice(Fragment.from(part), 0, 0);
+}
+
 export function Canvas({
   song,
   onChange,
@@ -232,6 +277,7 @@ export function Canvas({
     const view = new EditorView(editorRef.current, {
       state,
       nodeViews: createNodeViews(),
+      clipboardTextParser,
       dispatchTransaction(tr) {
         if (!viewRef.current) return;
 

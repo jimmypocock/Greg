@@ -4,13 +4,15 @@
  * Features:
  * - Gutter shows line type icon (empty for lyric, # for header, > for chord, // for annotation)
  * - Click on gutter cycles through line types
+ * - When Shift is held, gutter shows drag icon
  */
 
 import { Node as ProseMirrorNode } from 'prosemirror-model';
 import { EditorView, NodeView } from 'prosemirror-view';
 import { LineType } from '@/types/song';
 
-import { LINE_TYPE_CYCLE, LINE_TYPE_ICONS } from './constants';
+import { LINE_TYPE_CYCLE, LINE_TYPE_ICONS, DRAG_ICON } from './constants';
+import { getIsShiftHeld, subscribeToShift } from './shiftTracking';
 
 export class LineNodeView implements NodeView {
   dom: HTMLElement;
@@ -19,6 +21,7 @@ export class LineNodeView implements NodeView {
   private node: ProseMirrorNode;
   private view: EditorView;
   private getPos: () => number | undefined;
+  private unsubscribeShift: () => void;
 
   constructor(
     node: ProseMirrorNode,
@@ -45,18 +48,29 @@ export class LineNodeView implements NodeView {
     this.dom.appendChild(this.contentDOM);
 
     // Set initial state
-    this.updateLineType();
+    this.updateGutter();
 
     // Bind event handlers
     this.handleGutterClick = this.handleGutterClick.bind(this);
     this.gutter.addEventListener('click', this.handleGutterClick);
+
+    // Subscribe to shift key changes
+    this.unsubscribeShift = subscribeToShift(() => this.updateGutter());
   }
 
-  private updateLineType() {
+  private updateGutter() {
     const lineType = (this.node.attrs.lineType as LineType) || LineType.LYRIC;
     this.dom.setAttribute('data-line-type', lineType);
     this.contentDOM.className = `pm-line-content pm-line-${lineType.toLowerCase()}`;
-    this.gutter.textContent = LINE_TYPE_ICONS[lineType];
+
+    // Show drag icon when shift is held, otherwise show line type icon
+    if (getIsShiftHeld()) {
+      this.gutter.textContent = DRAG_ICON;
+      this.gutter.classList.add('pm-gutter-drag');
+    } else {
+      this.gutter.textContent = LINE_TYPE_ICONS[lineType];
+      this.gutter.classList.remove('pm-gutter-drag');
+    }
   }
 
   private handleGutterClick(e: MouseEvent) {
@@ -105,11 +119,12 @@ export class LineNodeView implements NodeView {
   update(node: ProseMirrorNode): boolean {
     if (node.type !== this.node.type) return false;
     this.node = node;
-    this.updateLineType();
+    this.updateGutter();
     return true;
   }
 
   destroy() {
     this.gutter.removeEventListener('click', this.handleGutterClick);
+    this.unsubscribeShift();
   }
 }
