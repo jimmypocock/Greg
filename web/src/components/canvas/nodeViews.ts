@@ -7,23 +7,16 @@
 
 import { Node as ProseMirrorNode } from 'prosemirror-model';
 import { EditorView, NodeView } from 'prosemirror-view';
+import { NodeSelection } from 'prosemirror-state';
 import { LineType } from '@/types/song';
 
-// Line type cycle order
+// Line type cycle order (for gutter click cycling)
 const LINE_TYPE_CYCLE: LineType[] = [
   LineType.LYRIC,
   LineType.SECTION_HEADER,
   LineType.CHORD,
   LineType.ANNOTATION,
 ];
-
-// Line type icons
-const LINE_ICONS: Record<LineType, string> = {
-  [LineType.SECTION_HEADER]: '#',
-  [LineType.CHORD]: '>',
-  [LineType.ANNOTATION]: '//',
-  [LineType.LYRIC]: '',
-};
 
 /**
  * NodeView for line nodes.
@@ -128,36 +121,89 @@ export class LineNodeView implements NodeView {
 
 /**
  * NodeView for label nodes (part headers).
- * Uses CSS ::before for gutter (always shows #)
+ * Includes a drag handle that triggers ProseMirror's native drag behavior.
  */
 export class LabelNodeView implements NodeView {
   dom: HTMLElement;
   contentDOM: HTMLElement;
+  private dragHandle: HTMLElement;
+  private view: EditorView;
+  private getPos: () => number | undefined;
 
   constructor(
     node: ProseMirrorNode,
     view: EditorView,
     getPos: () => number | undefined
   ) {
-    // Create wrapper - gutter is rendered via CSS ::before
+    this.view = view;
+    this.getPos = getPos;
+
+    // Create wrapper
     this.dom = document.createElement('div');
     this.dom.className = 'pm-label-wrapper';
+
+    // Create drag handle - draggable so it can initiate native drag
+    this.dragHandle = document.createElement('div');
+    this.dragHandle.className = 'pm-drag-handle';
+    this.dragHandle.contentEditable = 'false';
+    this.dragHandle.draggable = true;
+    this.dragHandle.innerHTML = '⋮⋮'; // Grip icon
+    this.dom.appendChild(this.dragHandle);
 
     // Create content area
     this.contentDOM = document.createElement('div');
     this.contentDOM.className = 'pm-label-content';
     this.dom.appendChild(this.contentDOM);
+
+    // Bind event handlers
+    this.handleDragStart = this.handleDragStart.bind(this);
+    this.dragHandle.addEventListener('dragstart', this.handleDragStart);
+  }
+
+  private getPartPos(): number | null {
+    const pos = this.getPos();
+    if (pos === undefined) return null;
+
+    // Walk up to find the parent part
+    const $pos = this.view.state.doc.resolve(pos);
+    for (let d = $pos.depth; d >= 1; d--) {
+      const node = $pos.node(d);
+      if (node.type.name === 'part') {
+        return $pos.before(d);
+      }
+    }
+    return null;
+  }
+
+  private handleDragStart(e: DragEvent) {
+    const partPos = this.getPartPos();
+    if (partPos === null) {
+      e.preventDefault();
+      return;
+    }
+
+    // Select the part node - this tells ProseMirror what we're dragging
+    const tr = this.view.state.tr.setSelection(
+      NodeSelection.create(this.view.state.doc, partPos)
+    );
+    this.view.dispatch(tr);
+
+    // Let ProseMirror's native drag handle the rest
+    // The dropCursor plugin will show where it'll land
   }
 
   update(node: ProseMirrorNode): boolean {
     return node.type.name === 'label';
   }
 
-  destroy() {}
+  destroy() {
+    this.dragHandle.removeEventListener('dragstart', this.handleDragStart);
+  }
 }
 
 /**
- * NodeView for part nodes (invisible wrapper).
+ * NodeView for part nodes (sections).
+ * Drag is initiated via LabelNodeView's drag handle using ProseMirror's native drag.
  */
 export class PartNodeView implements NodeView {
   dom: HTMLElement;
