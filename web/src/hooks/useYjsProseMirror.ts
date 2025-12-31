@@ -106,8 +106,15 @@ export function useYjsProseMirror({
       return;
     }
 
-    // Clean up existing connection
-    disconnect();
+    // Clean up existing connection (without state updates - those come after)
+    if (providerRef.current) {
+      providerRef.current.destroy();
+      providerRef.current = null;
+    }
+    if (docRef.current) {
+      docRef.current.destroy();
+      docRef.current = null;
+    }
 
     setStatus('connecting');
     onStatusChangeRef.current?.('connecting');
@@ -194,7 +201,7 @@ export function useYjsProseMirror({
       setStatus('error');
       onStatusChangeRef.current?.('error');
     }
-  }, [songId, accessToken, isAuthenticated, disconnect]);
+  }, [songId, accessToken, isAuthenticated]);
 
   // Reconnect
   const reconnect = useCallback(() => {
